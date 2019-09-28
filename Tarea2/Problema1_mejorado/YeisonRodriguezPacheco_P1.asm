@@ -18,48 +18,56 @@
 ; llevar la cuenta de cuando se debe detener el programa.
 ;
 ;
+
+;*******************************************************************************
+;                        DECLARACION ESTRUCTURAS DE DATOS
+;*******************************************************************************
         ORG $1000
-CANT:      ds 1
-CLEAR:     ds 1
-CONTADOR:  ds 1
+CANT:      ds 1          ; Variable tipo byte
+
+CLEAR:     ds 1          ; Variable auxiliar tipo byte. Utilizada para guardar
+                         ; una posición a borrar del arreglo ORDENAR.
+                         
+CONTADOR:  ds 1          ; Variable tipo byte utilizada como contador.
 
         ORG $1100
-ORDENAR:              ds 32
+ORDENAR:   ds 200        ; Arreglo de numero de 1 byte a ordenar
 
-        ORG $1120
-ORDENADOS:      ds 32
+        ORG $1200
+ORDENADOS: ds 200        ; Arreglo que almacena numeros de 1 byte ordenados
 
+
+;*******************************************************************************
+;                              PROGRAMA PRINCIPAL
+;*******************************************************************************
         ORG $1500
         
         LDX #ORDENAR
         LDY #ORDENADOS
-        LDAA CANT   	; CONTADOR '= CANT - 1
-        BEQ FIN     	; Si cant es 0, termina
+        CLR CLEAR           ; CLEAR = 0
+        LDAA CANT           ; CONTADOR '= CANT - 1
+        BEQ FIN             ; Si cant es 0, termina
         DECA
-        STAA CONTADOR
-        CLR CLEAR   	; CLEAR = 0
-        
+        STAA CONTADOR       ; Contador = CANT -1
 Main_loop:
-	CLRB        	; B = 0
-        LDAA CANT   	; A '= CANT - 1
+        CLRB                ; B = 0
+        LDAA CANT           ; A '= CANT - 1
         DECA
 check_next_number:
-	TST A,X  	; Es el numero analizado 0?
+        TST A,X          ; Es el numero analizado 0?
         BEQ decrementar_contador_interno
-        CMPB #0  	; B = 0?
-        BEQ guardar_num
+        TBEQ B, guardar_num  ; B = 0?
         CMPB A,X    ; Numero actual mayor o igual a numero en memoria?
         BGT guardar_num
-        CMPB A,X 	; Numero actual igual a numero en memoria?
+        CMPB A,X         ; Numero actual igual a numero en memoria?
         BNE decrementar_contador_interno
-        CLR A,X  	; Poniendo numero en memoria igual al actual en 0 para eliminarlo
+        CLR A,X          ; Poniendo numero en memoria igual al actual en 0 para eliminarlo
         BRA decrementar_contador_interno
 guardar_num:
-        LDAB A,X   	; Guardando numero que es menor al anterior
-        STAA CLEAR 	; Guardando posicion de borrado para borrarlo si fue el menor en esta iteracion
+        LDAB A,X           ; Guardando numero que es menor al anterior
+        STAA CLEAR         ; Guardando posicion de borrado para borrarlo si fue el menor en esta iteracion
 decrementar_contador_interno:
-        CMPA #0    	; Si ya se leyeron todos los numeros en esta iteracion
-        BEQ decrementar_contador_general
+        TBEQ A,decrementar_contador_general ; Si ya se leyeron todos los numeros en esta iteracion
         DECA
         BRA check_next_number  ; Se lee el siguiente numero
 decrementar_contador_general:
@@ -71,6 +79,4 @@ decrementar_contador_general:
         BRA Main_loop   ; Repetir el ciclo ya que el contador general no ha llegado a 0
 FIN:
         BRA FIN
-
-
 
