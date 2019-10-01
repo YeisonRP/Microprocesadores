@@ -1,15 +1,15 @@
-        ORG $1000
+        ORG $1100
 U:      ds 1
 V:      ds 1
 W:      ds 1
 Temp:   ds 1
 
-        ORG $1010
+        ORG $1110
 R:      ds 1
 S:      ds 1
 T:      ds 1
 
-	ORG $4000
+        ORG $2000
         Ldaa U
         Cmpa V
         Blt U_menor
