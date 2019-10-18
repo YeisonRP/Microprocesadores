@@ -21,18 +21,18 @@
 ;                        DECLARACION ESTRUCTURAS DE DATOS
 ;*******************************************************************************
         ORG $1000
-LONG:   db 11
+LONG:   db 10
 CANT:   ds 1
 CONT:   ds 1
 
         ORG $1020
-DATOS:  db 4,9,18,4,27,63,12,32,36,15,36,121,144,169,196,225,230
+DATOS:  db 4,9,18,4,27,63,12,32,36,15 ;,36,121,144,169,196,225,230
 
         ORG $1040
 CUAD:   db 4,9,16,25,36,49,64,81,100,121,144,169,196,225
 
         ORG $1100
-ENTERO: ds 13
+ENTERO: ds 30
 
 ;**********************************
 ; DECLARACIONES in/out DEBUG 12
@@ -70,10 +70,10 @@ Msj_4:    fcc "%i"
 ;                              PROGRAMA PRINCIPAL
 ;*******************************************************************************
 
-	ORG $2000
+        ORG $2000
         LDS #$3000
 main:
-	JSR LEER_CANT
+        JSR LEER_CANT
         JSR BUSCAR
         JSR Print_RESULT
         BRA main
@@ -82,6 +82,9 @@ main:
 ;*******************************************************************************
 ;                                SUBRUTINA LEER_CANT
 ;*******************************************************************************
+;Descripcion: Esta subrutina se encarga de solicitar al usuario por medio del
+;teclado la cantidad de numeros (CANT) del arreglo DATOS con raiz cuadrada a
+;imprimir. Solo se aceptan numeros del 01 al 99 (00 no).
 
 LEER_CANT:
         LDX #0
@@ -90,18 +93,18 @@ LEER_CANT:
         LDX #0
         LDAA #2
 Leyendo_dato:
-        PSHA
-        JSR [GETCHAR,x]
-        PULA
+        PSHA                     ;Guardando contexto actual
+        JSR [GETCHAR,x]          ; Tomando el dato de entrada en ASCII
+        PULA                     ; Cargando contexto anterior
         CMPB #$30
         BMI Leyendo_dato         ; Verificando si es menor que 0
         CMPB #$3a
         BPL Leyendo_dato         ; Verificando si es mayor que 9
-        DBEQ A,Procesar
-	LDX #0
-        JSR [PUTCHAR,x]
+        DBEQ A,Procesar          ; Si es el segundo numero a procesar, salta
+        LDX #0
+        JSR [PUTCHAR,x]          ; Imprimiendo caracter
         STAB CANT
-        BRA Leyendo_dato
+        BRA Leyendo_dato         ; repite el ciclo
 Procesar:
         LDAA CANT                      ; Verificando si ambos son 0, si es asi
         CMPA #$30                      ; vuelve a pedir el segundo numero
@@ -111,21 +114,21 @@ Procesar:
         LDAA #1
         BRA Leyendo_dato
 Continuar:
-	LDX #0
-        JSR [PUTCHAR,x]
-        SUBB #$30       		; calculando el numero en binario
-        PSHB                            ;guardando el numero
+        LDX #0
+        JSR [PUTCHAR,x]                 ; Imprimiendo segundo numero
+        SUBB #$30                       ; calculando el numero en binario
+        PSHB                            ; guardando el numero
         LDAB #10
         LDAA CANT
-        SUBA #$30                       ; calculando valor binario del num mas signif
-        MUL
+        SUBA #$30                       ; calculando valor binario del num mas
+        MUL                             ; significativo, multiplicandolo por 10
         STAB CANT
         PULB
-        ADDB CANT
-        STAB CANT
+        ADDB CANT                       ; Sumando parte alta y baja del numero
+        STAB CANT                       ; Y guaradando el resultado
         LDX #0         ; Imprimiendo "INGRESE EL VALOR DE CANT (ENTRE 1 Y 99):";Imprimiendo espacios de linea
         LDD #Msj_null
-        JSR [printf,x]
+        JSR [printf,x]                  ; Imprimiendo saltos de linea
         RTS
         
         
@@ -204,14 +207,14 @@ RAIZ:
 RAIZ_main_loop:
         PULB
         CMPB H__
-        BEQ RAIZ_Fin
+        BEQ RAIZ_Fin      ; Condicion de parada, si b = h (ver enunciado)
         ADDB H__
         LSRB              ; Dividiendo por 2
         PSHB              ; Resultado se guarda en pila
         TFR B,X            ; Cargando datos de division
-        CLRA
+        CLRA               ; Cargando en D X__
         LDAB X__
-        IDIV
+        IDIV               ; Dividiendo x/b
         XGDX
         STAB H__          ; Guardando resultado en H__
         BRA RAIZ_main_loop
