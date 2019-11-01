@@ -4,13 +4,15 @@
 ;*******************************************************************************
 ;                                                                              *
 ;       UNIVERSIDAD DE COSTA RICA                                              *
-;       FECHA 25/10/19                                                         *
+;       FECHA 02/11/19                                                         *
 ;       AUTOR: YEISON RODRIGUEZ PACHECO B56074                                 *
 ;       COREREO: yeisonrodriguezpacheco@gmail.com                              *
 ;                                                                              *
 ;                                                                              *
-; Descripcion: Este programa se encarga de realizar lecturas del teclado de la *
-; Dragon 12 plus de la siguiente forma:                                        *
+; Descripcion: Este programa se encarga de realizar todo el control en una fa- *
+; brica que hace bolsas de tornillos. El programa funciona en dos modos:
+; Modo config: En este modo se ingresan datos en el teclado de la tarjeta, el
+; teclado esta definido como vemos a continuacion:
 ;                                                                              *
 ;                 C0  C1  C2                                                   *
 ;                 PA0 PA1 PA2                                                  *
@@ -20,35 +22,36 @@
 ;     PA4, R0 -  | 1 | 2 | 3 |                                                 *
 ;                -------------                                                 *
 ;                |   |   |   |                                                 *
-;     PA5, R2 -  | 4 | 5 | 6 |                                                 *
+;     PA5, R1 -  | 4 | 5 | 6 |                                                 *
 ;                -------------                                                 *
 ;                |   |   |   |                                                 *
-;     PA6, R3 -  | 7 | 8 | 9 |                                                 *
+;     PA6, R2 -  | 7 | 8 | 9 |                                                 *
 ;                -------------                                                 *
 ;                |   |   |   |                                                 *
-;     PA7, R4 -  | B | 0 | E |                                                 *
+;     PA7, R3 -  | B | 0 | E |                                                 *
 ;                -------------                                                 *
 ;                                                                              *
-; INFORMACION GENERAL:                                                         *
-; Las teclas leidas por el teclado son guardadas (cuando se suelta la tecla)   *
-; NUM_ARRAY. La cantidad maxima de teclas a leer es almacenada en la variable  *
-; MAX_TCL, por lo que si se desea leer 3 teclas, se debe poner el valor 3 en   *
-; dicha variable. El boton B permite borrar teclas si fueron ingresadas de     *
-; manera erronea. El boton E permite validar las teclas que ya han sido ingre- *
-; sadas. Al presionar el boton sw5 de la dragon 12 (teniendo los dip switch en *
-; alto, se resetea el arreglo NUM_ARRAY y se pone en estado bajo la bandera    *
-; ARRAY_OK                                                                     *
+; Al ingresar el enter se guarda la cantidad de tornillos que tendra la bolsa, *
+; seguidamente si se baja el dipswitch numero 7 se pasara al modo run, que se  *
+; detalla a continuacion.                                                      *
+; Modo Run: El modo run es cuando se procede a contar los tornillos en la banda*
+; ,se muestra la cuenta de los tornillos en los display 3 y 4,y cuando se llena*
+; la bolsa se activa un rele que se encarga de dar el control al sistema que   *
+; empaca la bolsa. Para llenar otra bolsa se debe pulsar el sw5.               *
 ;                                                                              *
-; INFORMACION ESPECIFICA:                                                      *
-; Si otro programa requiere leer las teclas ingresadas en la dragon 12 se re-  *
-; comienda lo siguiente para realizar una lectura.                             *
-; Cuando ARRAY_OK sea 1(bit 3 de la variable BANDERAS) significa que el arreglo*
-; esta listo para ser leido. Para realizar esta accion se debe leer tecla por  *
-; tecla (byte a byte) del arreglo NUM_ARRAY y se debe detener la lectura hasta *
-; que se llegue a un valor $FF o hasta que se hayan leido MAX_TCL teclas.      *
-; En caso de que se quieran leer mas de 6 teclas se deben agregar bytes a      *
-; NUM_ARRAY inicializados en $ff.                                              *
-;                                                        *                     *
+; Si hay dificultades para ver los display, se debe pulsar el sw2 para subir el*
+; brillo de los display, si por el contrario se desea bajar, presionar sw3.    *
+;                                                                              *
+; Para resetear el contador de bolsas, presionar sw4                           *
+;                                                                              *
+; Si se desea volver al modo config para cambiar el tamano de las bolsas, sim- *
+; plemente se debe subir el dipswitch 7 nuevamente y repetir el proceso.       *
+;                                                                              *
+; En el modo config siempre estara encendido el led PB1, en el modo run el PB0.*
+;                                                                              *
+; En la pantalla LED del dispositivo se mostrara informacion relevante sobre   *
+; las variables desplegadas en los display de 7 segmentes.                     *
+;                                                                              *
 ;* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 
 
@@ -63,14 +66,14 @@ TECLA_IN:       ds 1        ;Tecla leida en un momento t1
 CONT_REB:       ds 1        ;Contador de rebotes que espera 10ms por la subrutina RTI_ISR
 CONT_TCL:       ds 1        ;Contador de teclas que han sido escritas, usada en FORMAR_ARRAY
 PATRON:         ds 1        ;Contador que va hasta 5, usado por MUX_TECLADO
-BANDERAS:       ds 1        ;X:X:X:MODSEL:CAMBIO_MODO:ARRAY_OK:TLC_LEIDA:TCL_LISTA
+BANDERAS:       ds 1        ;X:X:CAMBIO_MODO_ant:MODSEL:CAMBIO_MODO:ARRAY_OK:TLC_LEIDA:TCL_LISTA
                             ; CAMBIO_MODO es para que la pantalla LCD solo se refresque una vez entre cada cambio de modo
                             ; MODSEL. 1 es para modo CPROG, 0 MODO RUN
 CUENTA:         ds 1        ; Lleva la cuenta de los tornillos
 ACUMUL:         ds 1        ; Contador de empaques procesados, llega a 99 y rebasa hasta 0 al sumarle mas
 CPROG:          ds 1        ; Con cuanto se llena una bolsita de tornillos
-VMAX:           db 250
-; Cuenta maxima a la que llega TIMER_CUENTA (subrutina run)
+VMAX:           db 250      ; Cuenta maxima a la que llega TIMER_CUENTA (subrutina run)
+
 TIMER_CUENTA:   ds 1        ; Variable utilizada para contar con RTI hasta VMAX (subrutina run)
 LEDS:           ds 1        ; LEDS a ser encendidos
 BRILLO:         ds 1        ; Brillo de los leds, se sube de 5 en 5. Va de 0 a 100 es la variable K
@@ -87,14 +90,14 @@ DISP3:          ds 1
 DISP4:          ds 1
 CONT_7SEG:      ds 2        ; Para hacer que cada 10hz se llame a BCD_7SEG
 CONT_DELAY:     ds 1
-D2mS:           db 10   ; falta definir valor
-D240uS:         db 10   ; falta definir valor
-D60uS:          db 10   ; falta definir valor
-CLEAR_LCD:      db 10   ; falta definir valor
-ADD_L1:         db 10
-ADD_L2:         db 10
-BIN1:           ds 1     ; No estaban en la declaracion original
-BIN2:           ds 1     ; No estaban en la declaracion original
+D2mS:           ds 1
+D240uS:         ds 1
+D60uS:          ds 1
+CLEAR_LCD:      ds 1
+ADD_L1:         ds 1
+ADD_L2:         ds 1
+BIN1:           ds 1
+BIN2:           ds 1
 BCD1_aux:           ds 1        ; Digitos en BCD, los guarda la subrutina BIN_BCD
 BCD2_aux:           ds 1
         ORG $1030
@@ -119,17 +122,23 @@ iniDsp:         ds 10
         ORG $3e66
         dw OC4_ISR
         
-
+        ; Vector interrupcion del real time interrupt
         ORG $3e70
         dw RTI_ISR
         
-        ;
+        ; Vector de interrupcion de key wakeups
         ORG $3e4c
         dw PHO_ISR
         
 
 
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
+
+
+
+
+
 
 
 
@@ -145,22 +154,18 @@ iniDsp:         ds 10
 ;INICIALIZACION DE HARDWARE:
         ;subrutina mux_teclado:
         MOVB #$01,PUCR       ;Resistencias pull up
-        MOVB #$F0, DDRA      ;Puerto A, parte alta salidas, parte baja entradas
+        MOVB #$F0,DDRA      ;Puerto A, parte alta salidas, parte baja entradas
         
         ;subrutina RTI_ISR:
         movb #$23,RTICTL        ; M = 2 n = 3
         bset CRGINT,#$80        ; activa rti
         
         ;subrutina PHO_ISR:
-        bset PIEH,$01           ; Activando interrupcion PH0
-        bset PIEH,$02           ; Activando interrupcion PH1
-        bset PIEH,$04           ; Activando interrupcion PH2
-        bset PIEH,$08           ; Activando interrupcion PH3
-        
-        ;
+        bset PIEH,$0F           ; Activando interrupcion PH0,PH1,PH2,PH3,
+
         ;Inicializacion de Output compare canal 4.
-        MOVB #$90,TSCR1 ; TEN = 1 , TFFCA = 1. Habilitando modulo timers y el borrado rapido
-        MOVB #$00,TSCR2 ; Preescalador = 1
+        BSET TSCR1,$90 ; TEN = 1 , TFFCA = 1. Habilitando modulo timers y el borrado rapido
+        CLR TSCR2 ; Preescalador = 1
         BSET TIE,$10    ; Habilitando interrupcion output compare canal 4
         BSET TIOS,$10   ; Pone como salida canal 4
         LDD TCNT        ; Inicializa TC4  , esto va mas abajo
@@ -170,14 +175,13 @@ iniDsp:         ds 10
         ; Inicializacion de Puerto B y P para uso de los display de 7 seg.
         MOVB #$FF,DDRB            ; Todas salidas puerto B (segentos de display)
         MOVB #$0F,DDRP            ; 4 salidas puerto P (activan cada display)
-        MOVB #$00, PORTB          ; Apagando sementos
-        MOVB #$0F, PTP            ; Apagando los display
 
         ;Inicializacion puerto J para usar leds
         bset DDRJ,$02             ; Salida puerto j
 
-        movb #$02, LEDS          ; Modo config debe arrancar
-        ;movb #$01, LEDS          ; Modo run
+        ; Inicializacion del relay
+        BSET    DDRE,%00000100     ;PE2 salida para rele
+
 ;INICIALIZACION DE VARIABLES:
         CLI                     ; Activando interrupciones
         MOVB #$FF,TECLA
@@ -186,36 +190,66 @@ iniDsp:         ds 10
         CLR BANDERAS
         BSET BANDERAS,$10       ; Poniendo el sistema en modo CONFIG
         CLR CONT_TCL
-        ; pantallas
-        CLR CUENTA
-        CLR ACUMUL
+        ; DISPLAYS
         CLR CPROG
         CLR CONT_DIG
-        CLR DISP1
-        CLR DISP2
-        CLR DISP3
-        CLR DISP4
-        movb #$f0, BCD1_aux
-        movb #$f0,BCD2_aux
-        ; BORRAR ABAJO
-        MOVB #0,BRILLO
-        MOVB #$01, BIN1
-        MOVB #$00, BIN2
+        CLR CONT_TICKS
+        CLR BRILLO
+        CLR BIN1
+        CLR BIN2
         MOVW #0,CONT_7SEG
 
-        ; BORRAR ARRIBA
 ;PROGRAMA PRINCIPAL
-M_loop: JSR MODO_CONFIG
+;X:X:X:MODSEL:CAMBIO_MODO:ARRAY_OK:TLC_LEIDA:TCL_LISTA
+
+M_loop:
+        TST CPROG                 ; Si cprog es 0, solo llama a modo_config
+        Beq cambiar_a_modo_run:
+        BRSET PTIH,$80,modsel_es_0 ; Revisando por pulling el modo (config o run(
+        BCLR BANDERAS,$10
+        BRA contin_main
+modsel_es_0:
+        BSET BANDERAS,$10
+contin_main:
+        BRSET BANDERAS,$10,cprog_listo    ; Salta si ya CPROG se configuro
+        BRset BANDERAS,$08,invocar_run    ; Salta si se esta en modo config
+        Bset BANDERAS,$08                 ; Cambio modo
+        MOVB #$01,LEDS                    ; Cambian leds por el modo
+invocar_run:
+        JSR MODO_RUN
+        LDAA CUENTA                     ; Verificando si se debe activar el rele
+        CMPA CPROG
+        BEQ act_rele
+        BCLR PORTE,%00000100           ;Desactivando rele
+        bra bin_a_bcd
+act_rele:
+        BSET PORTE,%00000100           ;Activando rele
+        bra bin_a_bcd
+
+cambiar_a_modo_run:
+        CLR CPROG            ; Reiniciando valores por el cambio de modo run a config
+        CLR CUENTA
+        CLR ACUMUL
+        BCLR PORTE,%00000100 ;desactivando rele
+        clr bin1
+        BCLR BANDERAS,$08
+        MOVB #$02,LEDS
+        JSR MODO_CONFIG
+        BRA bin_a_bcd
+cprog_listo:
+        BRSET BANDERAS,$08,cambiar_a_modo_run   ; Verificando cambio modo
+Mod_conf:
+        JSR MODO_CONFIG
+bin_a_bcd:
         JSR BIN_BCD
-        BRSET BANDERAS,$10 M_loop
-        movb VMAX,TIMER_CUENTA  ; borrar!!
-M_loop_:  JSR MODO_RUN
-          JSR BIN_BCD
-          bra *
-
-
-
+        BRA M_loop                    ; Comenzar de nuevo
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
+
+
+
+
+
 
 
 
@@ -256,6 +290,13 @@ MODO_CONFIG_tcl_no_valida:
 
 
 
+
+
+
+
+
+
+
 ;*******************************************************************************
 ;                             SUBRUTINA BCD_BIN
 ;*******************************************************************************
@@ -275,12 +316,21 @@ BCD_BIN:
 
 
 
+
+
+
+
+
+
+
+
+
 ;*******************************************************************************
-;                             SUBRUTINA MODO_RUN REVISAR AGAIN!!!
+;                             SUBRUTINA MODO_RUN
 ;*******************************************************************************
 
-;NOTA PARA YEISON DEL FUTURO. CUANDO EN EL MAIN CAMBIO_MODO SEA 1, (SE ACTUALICEN
-; LOS DATOS DE LA LCD) Y SEA PARA EL MODO RUN, SE DEBE cargar TIMER_CUENTA en el valor VMAX
+;Descripcion: Esta subrutina se encarga de hacer todo el control del modo run
+; Para mas informacion ver el enunciado de la tarea/
 
 MODO_RUN:
         LDAA CPROG            ;Verificando Si CPROG = CUENTA
@@ -310,11 +360,20 @@ MODO_RUN_fin:                  ; Cargando valores en BIN1 y BIN2
 
 
 
+
+
+
+
+
+
+
+
+
 ;*******************************************************************************
 ;                             SUBRUTINA BIN_BCD
 ;*******************************************************************************
 
-;DESCRIPCION:
+;Descripcion: Esta subrutina pasa valores de BIN1 y BIN2 a BCD1 y BCD2
 
 BIN_BCD:
         LDX #BIN1  ; Cargando valores iniciales
@@ -374,9 +433,20 @@ BIN_BCD_fin_2:
 
 
 
+
+
+
+
+
+
+
+
 ;*******************************************************************************
 ;                             SUBRUTINA BCD_7SEG
 ;*******************************************************************************
+;Descripcion: Esta subrutina pasa valores de BCD1 y BCD2 a DISP1,DISP2,DISP3,
+; DISP4, en su respectivo codigo de 7 segmentos. Si hay ceros a la izquierda
+; se envia un codigo $fx
 
 BCD_7SEG:
         LDX #BCD1          ;Declaracion punteros iniciales
@@ -426,9 +496,19 @@ BCD_7SEG_FIN:
 
 
 
+
+
+
+
+
+
+
+
 ;*******************************************************************************
 ;                             SUBRUTINA TAREA_TECLADO
 ;*******************************************************************************
+; Descripcion: Esta subrutina se encarga de hacer toda la logica para leer una
+; tecla de manera correcta.
 TAREA_TECLADO:
         LDX #TECLAS
         LDY #NUM_ARRAY
@@ -466,6 +546,10 @@ FIN_TAREA_TECLADO:
         RTS
 
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
+
+
+
 
 
 
@@ -524,6 +608,9 @@ FORMAR_ARRAY_lleno:
         RTS
         
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
+
+
 
 
 
@@ -627,9 +714,11 @@ FIN_RTI_ISR_timer_cuenta:
 ;*******************************************************************************
 ;                                INTERRUPCION PHO_ISR
 ;*******************************************************************************
-;Descripcion: Esta interrupcion se encarga de borrar la bandera ARRAY_OK y de
-; llenar NUM_ARRAY con $FF.
-
+;Descripcion: Esta interrupcion se divide en 4 subrunitas:
+; PTH0: Borra CUENTA
+; PTH1: Borra ACUMUL
+; PTH2: Decrementa el brillo de los display de 7 segmentos
+; PTH3: Incrementa el brillo de los display de 7 segmentos
 PHO_ISR:
                 BRSET PIFH,$01,PTHO
                 BRSET PIFH,$02,PTH1
@@ -673,12 +762,27 @@ PTH3_fin:
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ;*******************************************************************************
 ;                                INTERRUPCION OC4_ISR
 ;*******************************************************************************
-;Descripcion:
-        ;bclr PTJ,$02              ; Enable de los leds
-        ;bset PTJ,$02              ; desable leds
+;Descripcion: Esta interrupcion realiza toda la logica para que funcionen los,
+; 4 displa de 7 segmentos y los leds a la vez. Para informacion mas detallada
+; ver el enunciado de la tarea
 OC4_ISR:
         LDX #DISP1
         LDAA #100                 ;Verificando si el contador de tics ya
@@ -690,19 +794,19 @@ OC4_ISR_tic_maximo:               ; Se debe cambiar de display
         CLR CONT_TICKS
         INC CONT_DIG
         LDAB CONT_DIG
-        CMPB #5
+        CMPB #5                   ; Si contador de digito se sale del rango se resetea
         BNE Continuar
         clr CONT_DIG
 Continuar:
-        LDAB CONT_DIG
+        LDAB CONT_DIG             ; Si el digito son los leds, se encienden
         CMPB #4
         BEQ encender_led
-        MOVB B,X,PORTB                ; Mandando leds al display
-        BSET PTJ,$02
+        MOVB B,X,PORTB                ; Mandando datos al display
+        BSET PTJ,$02                  ; apagando leds
         BRA continuar2
-encender_led:
+encender_led:                        ; encendiendo leds
         MOVB LEDS,PORTB
-        BCLR PTJ,$02
+        BCLR PTJ,$02                 ;encendiendo leds
 continuar2:
         LDAA #$F7                 ; Calculando cual display se debe encender
         LDAB CONT_DIG
@@ -744,5 +848,3 @@ OC4_ISR_retornar:
         STD TC4
         RTI
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
-
-
