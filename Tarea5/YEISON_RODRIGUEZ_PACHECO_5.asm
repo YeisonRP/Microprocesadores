@@ -157,6 +157,7 @@ iniDsp:         ds 10
         bset PIEH,$04           ; Activando interrupcion PH2
         bset PIEH,$08           ; Activando interrupcion PH3
         
+        ;
         ;Inicializacion de Output compare canal 4.
         MOVB #$90,TSCR1 ; TEN = 1 , TFFCA = 1. Habilitando modulo timers y el borrado rapido
         MOVB #$00,TSCR2 ; Preescalador = 1
@@ -172,7 +173,11 @@ iniDsp:         ds 10
         MOVB #$00, PORTB          ; Apagando sementos
         MOVB #$0F, PTP            ; Apagando los display
 
-        
+        ;Inicializacion puerto J para usar leds
+        bset DDRJ,$02             ; Salida puerto j
+
+        movb #$02, LEDS          ; Modo config debe arrancar
+        ;movb #$01, LEDS          ; Modo run
 ;INICIALIZACION DE VARIABLES:
         CLI                     ; Activando interrupciones
         MOVB #$FF,TECLA
@@ -185,33 +190,30 @@ iniDsp:         ds 10
         CLR CUENTA
         CLR ACUMUL
         CLR CPROG
+        CLR CONT_DIG
+        CLR DISP1
+        CLR DISP2
+        CLR DISP3
+        CLR DISP4
+        movb #$f0, BCD1_aux
+        movb #$f0,BCD2_aux
         ; BORRAR ABAJO
         MOVB #0,BRILLO
-        MOVB #$FF, DISP1
-        MOVB #$FF, DISP2
-        MOVB #$FF, DISP3
-        MOVB #$FF, DISP4
+        MOVB #$01, BIN1
+        MOVB #$00, BIN2
         MOVW #0,CONT_7SEG
+
         ; BORRAR ARRIBA
 ;PROGRAMA PRINCIPAL
-;M_loop: JSR MODO_CONFIG
-;        JSR BIN_BCD
-;        BRSET BANDERAS,$10 M_loop
-;        movb VMAX,TIMER_CUENTA  ; borrar!!
-;M_loop_:  JSR MODO_RUN
-;          JSR BIN_BCD
-;          bra *
-
-;PROGRAMA PRINCIPAL
 M_loop: JSR MODO_CONFIG
-        BRCLR BANDERAS,$04 M_loop
-        JSR MODO_CONFIG
         JSR BIN_BCD
-        movb VMAX,TIMER_CUENTA ; borrar!!
-M_loop_:
-          JSR MODO_RUN
+        BRSET BANDERAS,$10 M_loop
+        movb VMAX,TIMER_CUENTA  ; borrar!!
+M_loop_:  JSR MODO_RUN
           JSR BIN_BCD
-          bra M_loop_
+          bra *
+
+
 
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
@@ -675,10 +677,11 @@ PTH3_fin:
 ;                                INTERRUPCION OC4_ISR
 ;*******************************************************************************
 ;Descripcion:
-
+        ;bclr PTJ,$02              ; Enable de los leds
+        ;bset PTJ,$02              ; desable leds
 OC4_ISR:
         LDX #DISP1
-        LDAA #125                 ;Verificando si el contador de tics ya
+        LDAA #100                 ;Verificando si el contador de tics ya
         CMPA CONT_TICKS            ; llego a 125.
         BEQ OC4_ISR_tic_maximo
         INC CONT_TICKS             ; Iincrementando contador de tics
@@ -687,11 +690,22 @@ OC4_ISR_tic_maximo:               ; Se debe cambiar de display
         CLR CONT_TICKS
         INC CONT_DIG
         LDAB CONT_DIG
-        ANDB #$03                 ; MASCARA para solo analizar los 2 bits primeros
+        CMPB #5
+        BNE Continuar
+        clr CONT_DIG
+Continuar:
+        LDAB CONT_DIG
+        CMPB #4
+        BEQ encender_led
         MOVB B,X,PORTB                ; Mandando leds al display
+        BSET PTJ,$02
+        BRA continuar2
+encender_led:
+        MOVB LEDS,PORTB
+        BCLR PTJ,$02
+continuar2:
         LDAA #$F7                 ; Calculando cual display se debe encender
         LDAB CONT_DIG
-        ANDB #$03
 OC4_ISR_loop_1:
         BEQ OC4_ISR_fin_loop1
         LSRA                      ; Se desplaza el 0 para ver cual display se enciende
@@ -700,13 +714,17 @@ OC4_ISR_loop_1:
 OC4_ISR_fin_loop1:
         STAA PTP                  ; Guardando resultado obtenido
 OC4_ISR_continuar1:
-        LDAA #125                 ; Calculando cuando apagar el display
+        LDAA #100                 ; Calculando cuando apagar el display
         SUBA BRILLO
         STAA DT
         CMPA CONT_TICKS
         BNE OC4_ISR_continuar2
         MOVB #$FF,PTP             ; Se apaga el display
+        BSET PTJ,$02              ; disable leds
 OC4_ISR_continuar2:
+        BRCLR BANDERAS,$10,OC4_ISR_continuar23    ; Apagando dos display en modo config
+        BSET PTP,$03
+OC4_ISR_continuar23:
         LDD CONT_7SEG                 ; Calculando si ya pasaron 100ms
         CPD #5000
         BEQ OC4_ISR_llamar
@@ -728,65 +746,3 @@ OC4_ISR_retornar:
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
-
-
-;*******************************************************************************
-;-------------------------------------------------------------------------------
-;-----------------PROTOCOLO DE PRUEBAS REALIZADO A ESTE PROGRAMA----------------
-;-------------------------------------------------------------------------------
-;*******************************************************************************
-;
-; ------------------------------------------------------------------------------
-; PRUEBA 1.
-; MAX_TECLA = 5
-; SECUENCIA DE TECLAS INGRESADAS: 1 8 5 B 7 E
-; RESULTADO ESPERADO: 01 08 07 FF FF FF
-; ESTADO: APROBADO
-; ------------------------------------------------------------------------------
-; PRUEBA 2.
-; MAX_TECLA = 5
-; SECUENCIA DE TECLAS INGRESADAS: 1 8 5 5 0 B B 3 0 E
-; RESULTADO ESPERADO: 01 08 05 03 00 FF
-; ESTADO: APROBADO
-; ------------------------------------------------------------------------------
-; PRUEBA 3.
-; MAX_TECLA = 4
-; SECUENCIA DE TECLAS INGRESADAS: 1 8 5 7 4 2 0 E
-; RESULTADO ESPERADO: 01 08 05 07 FF FF
-; ESTADO: APROBADO
-; ------------------------------------------------------------------------------
-; PRUEBA 4.
-; MAX_TECLA = 6
-; SECUENCIA DE TECLAS INGRESADAS: E B B E
-; RESULTADO ESPERADO: FF FF FF FF FF FF
-; ESTADO: APROBADO
-; ------------------------------------------------------------------------------
-; PRUEBA 5.
-; MAX_TECLA = 2
-; SECUENCIA DE TECLAS INGRESADAS: 7 (MANTENER 5 SEGUNDOS ) E
-; RESULTADO ESPERADO:
-; ESTADO: APROBADO
-; ------------------------------------------------------------------------------
-; PRUEBA 6.
-; MAX_TECLA = 5
-; SECUENCIA DE TECLAS INGRESADAS: 9 6 8 2 4 B B 8 7 E (TODO RAPIDO)
-; RESULTADO ESPERADO: 09 06 08 08 07 FF
-; ESTADO: APROBADO
-; ------------------------------------------------------------------------------
-; PRUEBA 7.
-; MAX_TECLA = 6
-; SECUENCIA DE TECLAS INGRESADAS: 1 8 5 2 4 B B B B B B B E B E 6 4 3 B 2 1 E
-; RESULTADO ESPERADO: 06 04 02 01 FF FF
-; ESTADO: APROBADO
-; ------------------------------------------------------------------------------
-; PRUEBA 8.
-; MAX_TECLA = 5
-; SECUENCIA DE TECLAS INGRESADAS: E B 2 6 4 B B E
-; RESULTADO ESPERADO: 02 FF FF FF FF FF
-; ESTADO: APROBADO
-; ------------------------------------------------------------------------------
-; PRUEBA 9.
-; MAX_TECLA = 1
-; SECUENCIA DE TECLAS INGRESADAS: E B 2 B E 7 B 8 E
-; RESULTADO ESPERADO: 08 FF FF FF FF FF
-; ESTADO: APROBADO
