@@ -58,7 +58,7 @@
 ;*******************************************************************************
 ;                        DECLARACION ESTRUCTURAS DE DATOS
 ;*******************************************************************************
-
+EOM:     EQU $FF
         ORG $1000
 MAX_TCL:        db $02      ;Cantidad de teclas que se van a leer  (longitud)
 TECLA:          ds 1        ;Tecla leida en un momento t0
@@ -66,9 +66,10 @@ TECLA_IN:       ds 1        ;Tecla leida en un momento t1
 CONT_REB:       ds 1        ;Contador de rebotes que espera 10ms por la subrutina RTI_ISR
 CONT_TCL:       ds 1        ;Contador de teclas que han sido escritas, usada en FORMAR_ARRAY
 PATRON:         ds 1        ;Contador que va hasta 5, usado por MUX_TECLADO
-BANDERAS:       ds 1        ;X:X:CAMBIO_MODO_ant:MODSEL:CAMBIO_MODO:ARRAY_OK:TLC_LEIDA:TCL_LISTA
+BANDERAS:       ds 1        ;COMANDO_DATO:X:X:MODSEL:CAMBIO_MODO:ARRAY_OK:TLC_LEIDA:TCL_LISTA
                             ; CAMBIO_MODO es para que la pantalla LCD solo se refresque una vez entre cada cambio de modo
                             ; MODSEL. 1 es para modo CPROG, 0 MODO RUN
+                            ; COMANDO_DATO: Esta bandera es 0 si se envia un comando, 1 si se envian datos
 CUENTA:         ds 1        ; Lleva la cuenta de los tornillos
 ACUMUL:         ds 1        ; Contador de empaques procesados, llega a 99 y rebasa hasta 0 al sumarle mas
 CPROG:          ds 1        ; Con cuanto se llena una bolsita de tornillos
@@ -90,12 +91,12 @@ DISP3:          ds 1
 DISP4:          ds 1
 CONT_7SEG:      ds 2        ; Para hacer que cada 10hz se llame a BCD_7SEG
 CONT_DELAY:     ds 1
-D2mS:           ds 1
-D240uS:         ds 1
-D60uS:          ds 1
+D2mS:           dB 100
+D260uS:         dB 13
+D60uS:          dB 3
 CLEAR_LCD:      ds 1
-ADD_L1:         ds 1
-ADD_L2:         ds 1
+ADD_L1:         dB $80
+ADD_L2:         dB $C0
 BIN1:           ds 1
 BIN2:           ds 1
 BCD1_aux:           ds 1        ; Digitos en BCD, los guarda la subrutina BIN_BCD
@@ -107,9 +108,20 @@ TECLAS:         db $01,$02,$03,$04,$05,$06,$07,$08,$09,$0B,$0,$0E ;Tabla de tecl
         ORG $1050
 SEGMENT:       dB $3f,$06,$5b,$4f,$66,$6d,$7d,$07,$7f,$6f
         ORG $1060
-iniDsp:         ds 10
-        ORG $1070       ; mensajes
+iniDsp:         db $04,$28,$28,$06,%00001100 ;disp on, cursor off, no blinkin
+                db EOM
+
+
         
+          ORG $1070       ; mensajes
+Msj_config_1:    fcc "MODO CONFIG"
+        db EOM
+Msj_config_2:    fcc "INGRESE CPROG:"
+        db EOM
+Msj_run_1:    fcc "MODO RUN   "
+        db EOM
+Msj_run_2:    fcc "ACUMUL.-CUENTA"
+        db EOM
 #include registers.inc
 
 
@@ -168,9 +180,7 @@ iniDsp:         ds 10
         CLR TSCR2 ; Preescalador = 1
         BSET TIE,$10    ; Habilitando interrupcion output compare canal 4
         BSET TIOS,$10   ; Pone como salida canal 4
-        LDD TCNT        ; Inicializa TC4  , esto va mas abajo
-        ADDD #480
-        STD TC4                   ; se lee puerto PTn bit 4 puerto PTn o PTIT
+
         
         ; Inicializacion de Puerto B y P para uso de los display de 7 seg.
         MOVB #$FF,DDRB            ; Todas salidas puerto B (segentos de display)
@@ -182,6 +192,9 @@ iniDsp:         ds 10
         ; Inicializacion del relay
         BSET    DDRE,%00000100     ;PE2 salida para rele
 
+        ; Pantalla LED
+        MOVB #$FF,DDRK  ; Puerto K como salidas
+        
 ;INICIALIZACION DE VARIABLES:
         CLI                     ; Activando interrupciones
         MOVB #$FF,TECLA
@@ -199,9 +212,28 @@ iniDsp:         ds 10
         CLR BIN2
         MOVW #0,CONT_7SEG
 
-;PROGRAMA PRINCIPAL
-;X:X:X:MODSEL:CAMBIO_MODO:ARRAY_OK:TLC_LEIDA:TCL_LISTA
+        LDD TCNT        ; Inicializa TC4  , esto va mas abajo
+        ADDD #480
+        STD TC4
 
+        ; PANTALLA LCD
+
+        LDX #iniDsp
+Loop_lcd_inic:
+        LDAA 1,X+
+        CMPA #EOM
+        BEQ FIN_Loop_lcd_inic
+        BCLR BANDERAS, $80            ; para mandar un comando
+        JSR SEND
+        MOVB D60uS,CONT_DELAY
+        JSR DELAY
+        BRA Loop_lcd_inic
+FIN_Loop_lcd_inic:
+        LDAA #$01              ; CLEAR DISPLAY
+        BCLR BANDERAS, $80            ; para mandar un comando
+        JSR SEND
+        MOVB D2ms,CONT_DELAY
+        JSR DELAY
 M_loop:
         TST CPROG                 ; Si cprog es 0, solo llama a modo_config
         Beq cambiar_a_modo_run:
@@ -215,6 +247,9 @@ contin_main:
         BRset BANDERAS,$08,invocar_run    ; Salta si se esta en modo config
         Bset BANDERAS,$08                 ; Cambio modo
         MOVB #$01,LEDS                    ; Cambian leds por el modo
+        LDX #Msj_run_1
+        LDY #Msj_run_2
+        JSR CARGAR_LCD
 invocar_run:
         JSR MODO_RUN
         LDAA CUENTA                     ; Verificando si se debe activar el rele
@@ -234,6 +269,9 @@ cambiar_a_modo_run:
         clr bin1
         BCLR BANDERAS,$08
         MOVB #$02,LEDS
+        LDX #Msj_config_1
+        LDY #Msj_config_2
+        JSR CARGAR_LCD
         JSR MODO_CONFIG
         BRA bin_a_bcd
 cprog_listo:
@@ -247,9 +285,117 @@ bin_a_bcd:
 
 
 
+;*******************************************************************************
+;                             SUBRUTINA SEND
+;*******************************************************************************
+;Descripcion: Esta subrutina envia datos o comandos a pantalla LCD
+
+SEND:
+        PSHA
+        andA #$F0
+        LSRA
+        LSRA
+        STAA PORTK
+        BRCLR BANDERAS,$80,SEND_comando  ; 0 COMANDO, 1 DATO
+        BSET PORTK,$01
+        BRA SEND_continuar
+SEND_comando:
+        BCLR PORTK,$01
+SEND_continuar:
+        BSET PORTK,$02
+        MOVB D260us,CONT_DELAY
+        JSR DELAY
+        BCLR PORTK,$02
+
+        PULA
+        andA #$0F
+        LSLA
+        LSLA
+        STAA PORTK
+        BRCLR BANDERAS,$80,SEND_comando2  ; 0 COMANDO, 1 DATO
+        BSET PORTK,$01
+        BRA SEND_continuar2
+SEND_comando2:
+        BCLR PORTK,$01
+SEND_continuar2:
+        BSET PORTK,$02
+        MOVB D260us,CONT_DELAY
+        JSR DELAY
+        BCLR PORTK,$02
+        RTS
+;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
 
+
+
+
+
+
+
+
+
+
+
+;*******************************************************************************
+;                             SUBRUTINA CARGAR_LCD
+;*******************************************************************************
+;Descripcion: Esta subrutina carga los mensajes en la LCD
+
+CARGAR_LCD:
+        LDAA ADD_L1
+        BCLR BANDERAS, $80            ; para mandar un comando
+        JSR SEND
+        MOVB D60uS,CONT_DELAY
+        JSR DELAY
+CARGAR_LCD_first_loop:
+        LDAA 1,X+
+        CMPA #EOM
+        BEQ CARGAR_LCD_first_loop_end
+        BSET BANDERAS, $80            ; para mandar un dato
+        JSR SEND
+        MOVB D60uS,CONT_DELAY
+        JSR DELAY
+        BRA CARGAR_LCD_first_loop
+CARGAR_LCD_first_loop_end:
+        LDAA ADD_L2
+        BCLR BANDERAS, $80            ; para mandar un comando
+        JSR SEND
+        MOVB D60uS,CONT_DELAY
+        JSR DELAY
+        
+CARGAR_LCD_SECOND_loop:
+        LDAA 1,Y+
+        CMPA #EOM
+        BEQ CARGAR_LCD_SECOND_loop_end
+        BSET BANDERAS, $80            ; para mandar un dato
+        JSR SEND
+        MOVB D60uS,CONT_DELAY
+        JSR DELAY
+        BRA CARGAR_LCD_SECOND_loop
+CARGAR_LCD_SECOND_loop_end:
+        RTS
+;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
+
+
+
+
+
+
+
+;*******************************************************************************
+;                             SUBRUTINA DELAY
+;*******************************************************************************
+;Descripcion: Esta subrutina se encarga de generar delays a partir de la variable
+;CONT_DELAY. Por ejemplo un valor de CONT_DELAY de 50 da una interrupcion de 1x10-3
+; Debido a que cada decremento de CONT_DELAY se da cada 20us
+
+DELAY:
+        TST CONT_DELAY
+        BNE DELAY
+        RTS
+;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
 
