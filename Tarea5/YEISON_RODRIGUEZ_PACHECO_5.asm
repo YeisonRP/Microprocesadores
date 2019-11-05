@@ -218,22 +218,8 @@ Msj_run_2:    fcc "ACUMUL.-CUENTA"
 
         ; PANTALLA LCD
 
-        LDX #iniDsp
-Loop_lcd_inic:
-        LDAA 1,X+
-        CMPA #EOM
-        BEQ FIN_Loop_lcd_inic
-        BCLR BANDERAS, $80            ; para mandar un comando
-        JSR SEND
-        MOVB D60uS,CONT_DELAY
-        JSR DELAY
-        BRA Loop_lcd_inic
-FIN_Loop_lcd_inic:
-        LDAA #$01              ; CLEAR DISPLAY
-        BCLR BANDERAS, $80            ; para mandar un comando
-        JSR SEND
-        MOVB D2ms,CONT_DELAY
-        JSR DELAY
+        jsr LCD
+        
 M_loop:
         TST CPROG                 ; Si cprog es 0, solo llama a modo_config
         Beq cambiar_a_modo_run:
@@ -282,6 +268,31 @@ bin_a_bcd:
         JSR BIN_BCD
         BRA M_loop                    ; Comenzar de nuevo
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
+
+;*******************************************************************************
+;                             SUBRUTINA LCD
+;*******************************************************************************
+;Descripcion: Esta subrutina inicializa la subrutina LCD
+LCD:
+        LDX #iniDsp
+Loop_lcd_inic:
+        LDAA 1,X+
+        CMPA #EOM
+        BEQ FIN_Loop_lcd_inic
+        BCLR BANDERAS, $80            ; para mandar un comando
+        JSR SEND
+        MOVB D60uS,CONT_DELAY
+        JSR DELAY
+        BRA Loop_lcd_inic
+FIN_Loop_lcd_inic:
+        LDAA #$01              ; CLEAR DISPLAY
+        BCLR BANDERAS, $80            ; para mandar un comando
+        JSR SEND
+        MOVB D2ms,CONT_DELAY
+        JSR DELAY
+        RTS
+
 
 
 
@@ -453,8 +464,14 @@ BCD_BIN:
         LDAA #10
         LDAB 1,X+
         MUL             ; NUMERO MAS SIGNIFICATIVO MULTIPLICADO POR 10
+        LDAA 0,X
+        CMPA #$FF
+        BEQ BCD_BIN_continuar
         ADDB 0,X         ; Sumando parte baja
         STAB CPROG         ; Guardando valor binario en cprog
+BCD_BIN_continuar:
+        MOVB #$FF,0,X
+        MOVB #$FF,1,-X
         RTS
         
 
