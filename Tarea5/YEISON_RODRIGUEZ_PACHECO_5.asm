@@ -101,13 +101,17 @@ BIN1:           ds 1
 BIN2:           ds 1
 BCD1_aux:           ds 1        ; Digitos en BCD, los guarda la subrutina BIN_BCD
 BCD2_aux:           ds 1
+
         ORG $1030
 NUM_ARRAY:      db $ff,$ff,$ff,$ff,$ff,$ff             ;Guarda los numeros ingresados en el teclado
-        ORG $1040
+
+	ORG $1040
 TECLAS:         db $01,$02,$03,$04,$05,$06,$07,$08,$09,$0B,$0,$0E ;Tabla de teclas del teclado
-        ORG $1050
+
+	ORG $1050
 SEGMENT:       dB $3f,$06,$5b,$4f,$66,$6d,$7d,$07,$7f,$6f
-        ORG $1060
+
+	ORG $1060
 iniDsp:         db $04,$28,$28,$06,%00001100 ;disp on, cursor off, no blinkin
                 db EOM
 
@@ -216,13 +220,11 @@ Msj_run_2:    fcc "ACUMUL.-CUENTA"
         ADDD #480
         STD TC4
 
-        ; PANTALLA LCD
-
         jsr LCD
         
 M_loop:
         TST CPROG                 ; Si cprog es 0, solo llama a modo_config
-        Beq cambiar_a_modo_run:
+        Beq cargar_lcd_modo_cprog:
         BRSET PTIH,$80,modsel_es_0 ; Revisando por pulling el modo (config o run(
         BCLR BANDERAS,$10
         BRA contin_main
@@ -247,7 +249,7 @@ act_rele:
         BSET PORTE,%00000100           ;Activando rele
         bra bin_a_bcd
 
-cambiar_a_modo_run:
+cargar_lcd_modo_cprog:
         CLR CPROG            ; Reiniciando valores por el cambio de modo run a config
         CLR CUENTA
         CLR ACUMUL
@@ -261,7 +263,7 @@ cambiar_a_modo_run:
         JSR MODO_CONFIG
         BRA bin_a_bcd
 cprog_listo:
-        BRSET BANDERAS,$08,cambiar_a_modo_run   ; Verificando cambio modo
+        BRSET BANDERAS,$08,cargar_lcd_modo_cprog   ; Verificando cambio modo
 Mod_conf:
         JSR MODO_CONFIG
 bin_a_bcd:
@@ -460,7 +462,7 @@ MODO_CONFIG_tcl_no_valida:
 ;Descripcion: Esta subrutina se encarga de realizar la conversion de los numeros
 ; leidos en el teclado a binario y guardarlo en CPROG.
 BCD_BIN:
-        LDX #NUM_ARRAY + 1
+        LDX #NUM_ARRAY
         LDAA #10
         LDAB 1,X+
         MUL             ; NUMERO MAS SIGNIFICATIVO MULTIPLICADO POR 10
