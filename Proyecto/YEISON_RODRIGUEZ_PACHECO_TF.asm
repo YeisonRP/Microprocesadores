@@ -56,40 +56,61 @@
 
 
 ;*******************************************************************************
-;                        DECLARACION ESTRUCTURAS DE DATOS
+;                        DECLARACION ESTRUCTURAS DE DATOS                      *
 ;*******************************************************************************
 EOM:     EQU $FF
         ORG $1000
+        ; 1000 ---- 100F
+; CAMBIAR ORDEN DE BANDERAS AL FINAL
+BANDERAS:       ds 1        ; Banderas del sistema
+; COMANDO_DATO : CAMBIO_MODO : CALC_TICKS : ALERTA : PANT_FLAG : ARRAY_OK : TCL_LEIDA : TCL_LISTA
+BANDERAS2:      ds 1
+; X : X : X : X : X : X : X : X :
+
+
+; CALC_TICKS:
+; ALERTA: Bandera que esta en 1 cuando se debe poner el patron de LEDS de alerta
+; PANT_FLAG
+; ARRAY_OK: Bandera que esta en 1 cuando el array del teclado esta listo
+; TCL_LEIDA: Bandera que se pone en 1 cuando se lee una tecla del teclado
+; TCL_LISTA: Se pone en 1 cuando la tecla es soltada (esta lista)
+; COMANDO_DATO: Esta bandera es 0 si se envia un comando, 1 si se envian datos
+; CAMBIO_MODO: Se pone en 1 si hubo un cambio de modo
+
+V_LIM:          ds 1        ; Velocidad maxima a la que puede ir el auto
 MAX_TCL:        db $02      ;Cantidad de teclas que se van a leer  (longitud)
 TECLA:          ds 1        ;Tecla leida en un momento t0
 TECLA_IN:       ds 1        ;Tecla leida en un momento t1
 CONT_REB:       ds 1        ;Contador de rebotes que espera 10ms por la subrutina RTI_ISR
 CONT_TCL:       ds 1        ;Contador de teclas que han sido escritas, usada en FORMAR_ARRAY
 PATRON:         ds 1        ;Contador que va hasta 5, usado por MUX_TECLADO
-BANDERAS:       ds 1        ;COMANDO_DATO:X:X:MODSEL:CAMBIO_MODO:ARRAY_OK:TLC_LEIDA:TCL_LISTA
-                            ; CAMBIO_MODO es para que la pantalla LCD solo se refresque una vez entre cada cambio de modo
-                            ; MODSEL. 1 es para modo CPROG, 0 MODO RUN
-                            ; COMANDO_DATO: Esta bandera es 0 si se envia un comando, 1 si se envian datos
-CUENTA:         ds 1        ; Lleva la cuenta de los tornillos
-ACUMUL:         ds 1        ; Contador de empaques procesados, llega a 99 y rebasa hasta 0 al sumarle mas
-CPROG:          ds 1        ; Con cuanto se llena una bolsita de tornillos
-VMAX:           db 250      ; Cuenta maxima a la que llega TIMER_CUENTA (subrutina run)
-
-TIMER_CUENTA:   ds 1        ; Variable utilizada para contar con RTI hasta VMAX (subrutina run)
-LEDS:           ds 1        ; LEDS a ser encendidos
+NUM_ARRAY:      db $ff,$ff             ;Guarda los numeros ingresados en el teclado
 BRILLO:         ds 1        ; Brillo de los leds, se sube de 5 en 5. Va de 0 a 100 es la variable K
-CONT_DIG:       ds 1        ; Va de 0 a 3 (solo se usan sus dos primero bits) y cuenta
-                            ; El digito que se va a encenter
-CONT_TICKS:     ds 1        ; Cuenta tiks del Output compare, va de 0 a 100
-DT:             ds 1        ; DT = N - K duty cicle
-LOW:            ds 1        ; Utilizada por la subrutina BIN_BCD
+POT:            ds 1        ; Es el valor leido en el potenciometro.
+TICK_EN:        ds 2
+TICK_DIS:       ds 2
+
+        ; 1010 ---- 101F
+VELOC:          ds 1
+TICK_VEL:       ds 1
+BIN1:           ds 1
+BIN2:           ds 1
 BCD1:           ds 1        ; Digitos en BCD, los guarda la subrutina BIN_BCD
 BCD2:           ds 1
+BCD_L:          ds 1
+BCD_H:          ds 1
 DISP1:          ds 1        ; Los 4 valores de los display que se escriben en PORTB
 DISP2:          ds 1
 DISP3:          ds 1
 DISP4:          ds 1
+LEDS:           ds 1        ; LEDS a ser encendidos
+CONT_DIG:       ds 1        ; Cuenta  El digito que se va a encenter
+CONT_TICKS:     ds 1        ; Cuenta tiks del Output compare, va de 0 a 100
+
+        ; 1020 ---- 102B
+DT:             ds 1        ; DT = N - K duty cicle
 CONT_7SEG:      ds 2        ; Para hacer que cada 10hz se llame a BCD_7SEG
+CONT_200:       ds 2        ; Para hacer que cada 10hz se llame a BCD_7SEG
 CONT_DELAY:     ds 1
 D2mS:           dB 100
 D260uS:         dB 13
@@ -97,35 +118,37 @@ D60uS:          dB 3
 CLEAR_LCD:      ds 1
 ADD_L1:         dB $80
 ADD_L2:         dB $C0
-BIN1:           ds 1
-BIN2:           ds 1
-BCD1_aux:           ds 1        ; Digitos en BCD, los guarda la subrutina BIN_BCD
-BCD2_aux:           ds 1
+
+        ; 102C ---- 102F por definir:
+MODO_ANTERIOR   DS 1     ; Para saber si hubo cambio de modo
+; xx
+; xx
+; xx
+
+;BANDERAS:       ds 1        ;COMANDO_DATO:ALERTA:X:MODSEL:CAMBIO_MODO:ARRAY_OK:TLC_LEIDA:TCL_LISTA
+                            ; CAMBIO_MODO es para que la pantalla LCD solo se refresque una vez entre cada cambio de modo
+                            ; MODSEL. 1 es para modo CPROG, 0 MODO RUN
+                            ; COMANDO_DATO: Esta bandera es 0 si se envia un comando, 1 si se envian datos
 
         ORG $1030
-NUM_ARRAY:      db $ff,$ff,$ff,$ff,$ff,$ff             ;Guarda los numeros ingresados en el teclado
-
-        ORG $1040
 TECLAS:         db $01,$02,$03,$04,$05,$06,$07,$08,$09,$0B,$0,$0E ;Tabla de teclas del teclado
 
-        ORG $1050
-SEGMENT:       dB $3f,$06,$5b,$4f,$66,$6d,$7d,$07,$7f,$6f
+        ORG $1040
+SEGMENT:       dB $3f,$06,$5b,$4f,$66,$6d,$7d,$07,$7f,$6f,$40,$00
 
-        ORG $1060
+        ORG $1050
 iniDsp:         db $04,$28,$28,$06,%00001100 ;disp on, cursor off, no blinkin
                 db EOM
+        ORG $1060
+Msj_config_1:    fcc "  MODO CONFIG.  "
+        db EOM
+Msj_config_2:    fcc " VELOC. LIMITE  "
+        db EOM
+Msj_libre_1:    fcc "  RADAR   623   "
+        db EOM
+Msj_libre_2:    fcc "  MODO LIBRE    "
+        db EOM
 
-
-        
-          ORG $1070       ; mensajes
-Msj_config_1:    fcc "MODO CONFIG"
-        db EOM
-Msj_config_2:    fcc "INGRESE CPROG:"
-        db EOM
-Msj_run_1:    fcc "MODO RUN   "
-        db EOM
-Msj_run_2:    fcc "ACUMUL.-CUENTA"
-        db EOM
 #include registers.inc
 
 
@@ -146,8 +169,11 @@ Msj_run_2:    fcc "ACUMUL.-CUENTA"
         ORG $3e4c
         dw PHO_ISR
         
+        ORG $3E52       ;ATD
+        dw ATD_ISR
 
-
+        ORG $3E5E       ;Timmer Overflow
+        dw TCNT_ISR
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
@@ -168,6 +194,14 @@ Msj_run_2:    fcc "ACUMUL.-CUENTA"
         ORG $2000
         LDS #$3BFF
 ;INICIALIZACION DE HARDWARE:
+        ; Inicializacion de CAD
+        movb #$82,ATD0CTL2      ; Activa el ATD y las interrupciones
+        ldaa #80
+ATD_wait:
+        dbne a,ATD_wait          ;Espera 10us
+        movb #%00110000,ATD0CTL3      ; 6 conversiones por canal
+        movb #%10110111,ATD0CTL4      ; Define frecuencia en 500KHz y 4 periodos del itempo de muestreo
+        movb #%10000111,ATD0CTL5      ; comienza lectura de ATD con los datos justificados y eligiendo la entrada 7 donde esta el pot
         ;subrutina mux_teclado:
         MOVB #$01,PUCR       ;Resistencias pull up
         MOVB #$F0,DDRA      ;Puerto A, parte alta salidas, parte baja entradas
@@ -177,11 +211,12 @@ Msj_run_2:    fcc "ACUMUL.-CUENTA"
         bset CRGINT,#$80        ; activa rti
         
         ;subrutina PHO_ISR:
-        bset PIEH,$0F           ; Activando interrupcion PH0,PH1,PH2,PH3,
+;        bset PIEH,$09           ; Activando interrupcion PH0,PH3
 
-        ;Inicializacion de Output compare canal 4.
+        ;Inicializacion de Output compare canal 4 y Timmer overflow interrupt.
         BSET TSCR1,$90 ; TEN = 1 , TFFCA = 1. Habilitando modulo timers y el borrado rapido
-        CLR TSCR2 ; Preescalador = 1
+        BSET TSCR2, $03 ;BSET TSCR2, $83 Preescalador = 8
+
         BSET TIE,$10    ; Habilitando interrupcion output compare canal 4
         BSET TIOS,$10   ; Pone como salida canal 4
 
@@ -194,7 +229,7 @@ Msj_run_2:    fcc "ACUMUL.-CUENTA"
         bset DDRJ,$02             ; Salida puerto j
 
         ; Inicializacion del relay
-        BSET    DDRE,%00000100     ;PE2 salida para rele
+;        BSET    DDRE,%00000100     ;PE2 salida para rele
 
         ; Pantalla LED
         MOVB #$FF,DDRK  ; Puerto K como salidas
@@ -205,10 +240,9 @@ Msj_run_2:    fcc "ACUMUL.-CUENTA"
         MOVB #$FF,TECLA_IN
         CLR CONT_REB
         CLR BANDERAS
-        BSET BANDERAS,$10       ; Poniendo el sistema en modo CONFIG
         CLR CONT_TCL
         ; DISPLAYS
-        CLR CPROG
+        CLR V_LIM
         CLR CONT_DIG
         CLR CONT_TICKS
         CLR BRILLO
@@ -217,58 +251,65 @@ Msj_run_2:    fcc "ACUMUL.-CUENTA"
         MOVW #0,CONT_7SEG
 
         LDD TCNT        ; Inicializa TC4  , esto va mas abajo
-        ADDD #480
+        ADDD #60
         STD TC4
 
-        jsr LCD
+        BSET MODO_ANTERIOR,$01   ; Para que siempre sea diferente a los demas modos
         
-M_loop:
-        TST CPROG                 ; Si cprog es 0, solo llama a modo_config
-        Beq cargar_lcd_modo_cprog:
-        BRSET PTIH,$80,modsel_es_0 ; Revisando por pulling el modo (config o run(
-        BCLR BANDERAS,$10
-        BRA contin_main
-modsel_es_0:
-        BSET BANDERAS,$10
-contin_main:
-        BRSET BANDERAS,$10,cprog_listo    ; Salta si ya CPROG se configuro
-        BRset BANDERAS,$08,invocar_run    ; Salta si se esta en modo config
-        Bset BANDERAS,$08                 ; Cambio modo
-        MOVB #$01,LEDS                    ; Cambian leds por el modo
-        LDX #Msj_run_1
-        LDY #Msj_run_2
-        JSR CARGAR_LCD
-invocar_run:
-        JSR MODO_RUN
-        LDAA CUENTA                     ; Verificando si se debe activar el rele
-        CMPA CPROG
-        BEQ act_rele
-        BCLR PORTE,%00000100           ;Desactivando rele
-        bra bin_a_bcd
-act_rele:
-        BSET PORTE,%00000100           ;Activando rele
-        bra bin_a_bcd
+        jsr LCD         ; Inicializar LCD
+        
+; MAIN!!!
 
-cargar_lcd_modo_cprog:
-        CLR CPROG            ; Reiniciando valores por el cambio de modo run a config
-        CLR CUENTA
-        CLR ACUMUL
-        BCLR PORTE,%00000100 ;desactivando rele
-        clr bin1
-        BCLR BANDERAS,$08
-        MOVB #$02,LEDS
-        LDX #Msj_config_1
+Main:
+        LDAA MODO_ANTERIOR         ; Logica para saber si se cambio de modo
+        CMPA PTIH
+        BEQ continuar_main
+        BSET BANDERAS,$40
+continuar_main:
+        MOVB PTIH,MODO_ANTERIOR
+        
+        BRSET PTIH,$C0,mod_medicion ; Revisando por pulling si esta en modo Med
+        BCLR PIEH,$09           ; Desactivando interrupcion PH0,PH3
+        BCLR TSCR2,$80         ; Desactivando interrupcion TO
+        BRCLR PTIH,$C0,mod_config ; Revisando por pulling si esta en modo CONF
+; MODO LIBRE
+        BRSET BANDERAS,$40,mod_libre_actualizar_lcd
+        BRA mod_libre_no_actualizar_lcd
+mod_libre_actualizar_lcd:
+        BSET LEDS,$04           ; Encendiendo el led correspondiente de modo libre
+        BCLR LEDS,$03
+        LDX #Msj_libre_1       ; Cargando LCD
+        LDY #Msj_libre_2
+        JSR CARGAR_LCD
+        MOVB #$BB,BIN1
+        MOVB #$BB,BIN2          ; Cargando 0s en displays de la izq
+mod_libre_no_actualizar_lcd:
+        ;JSR LIBRE               ; Modo libre
+        BRA Main                ; Retorna al main
+        
+mod_config:
+        BRSET BANDERAS,$40,mod_config_actualizar_lcd
+        BRA mod_config_no_actualizar_lcd
+mod_config_actualizar_lcd:
+        LDX #Msj_config_1       ; Cargando LCD
         LDY #Msj_config_2
         JSR CARGAR_LCD
+        MOVB #$BB,BIN2          ; Cargando 0s en displays de la izq
+        BSET LEDS,$01           ; Encendiendo el led correspondiente
+        BCLR LEDS,$06
+        BCLR BANDERAS,$40       ; Borrando bandera cambio modo
+mod_config_no_actualizar_lcd:
         JSR MODO_CONFIG
-        BRA bin_a_bcd
-cprog_listo:
-        BRSET BANDERAS,$08,cargar_lcd_modo_cprog   ; Verificando cambio modo
-Mod_conf:
-        JSR MODO_CONFIG
-bin_a_bcd:
-        JSR BIN_BCD
-        BRA M_loop                    ; Comenzar de nuevo
+        BRA Main                ; Retorna al main
+
+mod_medicion:
+        BCLR BANDERAS,$40       ;CAMBIO MODO NO SE OCUPA AQUI
+        BSET LEDS,$02           ; Encendiendo el led correspondiente
+        BCLR LEDS,$05
+        BSET PIEH,$09           ; Activando interrupcion PH0,PH3
+        BSET TSCR2, $80         ; Activando interrupcion TO
+        ;JSR MEDICION
+        LBRA Main                ; Retorna al main
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
@@ -301,7 +342,8 @@ FIN_Loop_lcd_inic:
 ;*******************************************************************************
 ;                             SUBRUTINA SEND
 ;*******************************************************************************
-;Descripcion: Esta subrutina envia datos o comandos a pantalla LCD
+;Descripcion: Esta subrutina envia datos o comandos a pantalla LCD, recibe como
+; parametro la bandera COMANDO_DATO en 0 si es comando, 1 si es dato
 
 SEND:
         PSHA
@@ -419,27 +461,28 @@ DELAY:
 ;*******************************************************************************
 ;                             SUBRUTINA MODO_CONFIG
 ;*******************************************************************************
-;Descripcion: Esta subrutina se encarga de realizar la logica del modo de confi-
-;guracion, principalmente el hecho de guardar el valor ingresado en el teclado en
-;CPROG y posteriormente en BIN1. Ademas valida si el valor ingresado por el usua-
-;rio es valido (entre 12 y 96).
+;Descripcion:
+
+
+;FALTA PROBAR
 
 MODO_CONFIG:
         BRSET BANDERAS,$04,MODO_CONFIG_tcl_lista ;Verificando si Ya hay una tecla lista
         JSR TAREA_TECLADO                        ;Leyendo una tecla
+        MOVB V_LIM,BIN1                        ; Moviendo valor de V_lim a BIN1
         RTS
 MODO_CONFIG_tcl_lista: ;Ya hay una tecla lista
         JSR BCD_BIN          ;Pasando de BCD a binario
         BCLR BANDERAS,$04   ; Borrando array_ok
-        LDAA CPROG          ; Verificando si tecla es valida
-        CMPA #12
+        LDAA V_LIM          ; Verificando si tecla es valida
+        CMPA #30
         BLO MODO_CONFIG_tcl_no_valida
-        CMPA #96
+        CMPA #99
         BHI MODO_CONFIG_tcl_no_valida
-        MOVB CPROG,BIN1     ; Pasando el valor programado a BIN1
+        MOVB V_LIM,BIN1     ; Pasando el valor programado a BIN1
         RTS
 MODO_CONFIG_tcl_no_valida:
-        CLR CPROG           ; Valor no valido
+        CLR V_LIM           ; Valor no valido
         RTS
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
@@ -470,7 +513,7 @@ BCD_BIN:
         CMPA #$FF
         BEQ BCD_BIN_continuar
         ADDB 0,X         ; Sumando parte baja
-        STAB CPROG         ; Guardando valor binario en cprog
+        STAB V_LIM         ; Guardando valor binario en cprog
 BCD_BIN_continuar:
         MOVB #$FF,0,X
         MOVB #$FF,1,-X
@@ -486,112 +529,92 @@ BCD_BIN_continuar:
 
 
 
-
-
-
-
-;*******************************************************************************
-;                             SUBRUTINA MODO_RUN
-;*******************************************************************************
-
-;Descripcion: Esta subrutina se encarga de hacer todo el control del modo run
-; Para mas informacion ver el enunciado de la tarea/
-
-MODO_RUN:
-        LDAA CPROG            ;Verificando Si CPROG = CUENTA
-        CMPA CUENTA
-        BEQ MODO_RUN_fin
-        TST TIMER_CUENTA       ; SI timer cuenta no es 0 aun
-        BNE MODO_RUN_fin
-        INC CUENTA             ; Incrementando cuenta
-        MOVB VMAX,TIMER_CUENTA ; Recargando Timer_Cuenta
-        CMPA CUENTA
-        BNE MODO_RUN_fin
-        LDAA #99                      ; RESETEANDO ACUMUL A 0 SI PASA DE 99
-        CMPA ACUMUL
-        BEQ MODO_RUN_resetar_acum
-        INC ACUMUL             ; Si CPROG = nueva cuenta
-        BRA MODO_RUN_fin
-MODO_RUN_resetar_acum:
-        CLR ACUMUL
-MODO_RUN_fin:                  ; Cargando valores en BIN1 y BIN2
-        MOVB CUENTA,BIN1
-        MOVB ACUMUL,BIN2
-        RTS
-
-;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ;*******************************************************************************
 ;                             SUBRUTINA BIN_BCD
 ;*******************************************************************************
 
-;Descripcion: Esta subrutina pasa valores de BIN1 y BIN2 a BCD1 y BCD2
+;Descripcion: Esta subrutina convierte un numero pasado como parametro por el acu-
+; mulador A en binario y devuelve su valor en BCD en la variable BCD_L. Utiliza
+; Como variables BCD_H y BCD_L
 
 BIN_BCD:
-        LDX #BIN1  ; Cargando valores iniciales
-        LDY #BCD1_aux
-        CLR BCD1_aux
-        CLR BCD2_aux
-        LDAB #3
-BIN_BCD_main_loop:
-        DBEQ B,BIN_BCD_fin     ; Verificando si ya se analizaron todos los numeros en BCD
-        PSHB                   ; Inicializando valores  a utilizar
         LDAB #7
-        LDAA 1,X+
-BIN_BCD_second_loop:              ; Analizando primer nibble
-        LSLA                          ;Rotando
-        ROL 0,Y
+        CLR BCD_L
+BIN_BCD_2_main_loop:
+        LSLA
+        ROL BCD_L
         PSHA
         LDAA #$0F                ; Mascara de BCDX con 0F en A
-        ANDA 0,Y
+        ANDA BCD_L
         CMPA #5                  ; R1 mayor igual 5
-        BLO BIN_BCD_cont
+        BLO BIN_BCD2_cont
         ADDA #3
-BIN_BCD_cont:                   ; Analizando primer nibble
-        STAA LOW
-        LDAA #$F0                ; Mascara parte alta
-        ANDA 0,Y
+BIN_BCD2_cont:
+        STAA BCD_H      ; UTILIZADO COMO VARIABLE TEMPORAL LOW
+        LDAA #$F0                ; Mascara de BCDX con F0 en A
+        ANDA BCD_L
         CMPA #$50
-        BLO BIN_BCD_cont_2
+        BLO BIN_BCD2_cont_2
         ADDA #$30
-BIN_BCD_cont_2:               ; Analizando segundo nibble
-        ADDA LOW
-        STAA 0,Y
+BIN_BCD2_cont_2:
+        ADDA BCD_H      ; BCD_H = LOW
+        STAA BCD_L
         PULA
-        DBEQ B, BIN_BCD_fin_loop_2
-        BRA BIN_BCD_second_loop
-BIN_BCD_fin_loop_2:
-        PULB
-        LSLA                     ; Rotando
-        ROL 1,Y+                ; Desplazando
-        BRA BIN_BCD_main_loop   ; Volviendo al loop principal
-BIN_BCD_fin:                     ; Final del algoritmo que revisa si hay valores no validos, si es asi los pone en FF
-        BRCLR BCD1_aux,$F0,BIN_BCD_bcd1_borrar
-        BRA BIN_BCD_continuar:
-BIN_BCD_bcd1_borrar:
-        BSET BCD1_aux,$F0             ; Escribiendo un F en parte alta que no es valida
-BIN_BCD_continuar:
-        BRCLR BCD2_aux,$F0,BIN_BCD_bcd2_borrar
-        BRA BIN_BCD_fin_2
-BIN_BCD_bcd2_borrar:                   ; Escribiendo un F en parte alta que no es valida
-        BSET BCD2_aux,$F0
-BIN_BCD_fin_2:
-        MOVB BCD1_aux,BCD1
-        MOVB BCD2_aux,BCD2
+        DBEQ B, BIN_BCD2_fin
+        BRA BIN_BCD_2_main_loop
+BIN_BCD2_fin:              ; RETORNANDO
+        LSLA
+        ROL BCD_L
         RTS
+        
+;*******************************************************************************
+;                             SUBRUTINA CONV_BIN_BCD
+;*******************************************************************************
+
+;Descripcion: Esta subrutina llama a BIN_BCD y guarda los valores en BCD1 y BCD2
+; y hace el control de cuando poner en BCD1 y BCD2 los valores de AA o BB con los
+; cuales se desplegaran -- o nada en los display de 7 segmentos
+CONV_BIN_BCD:
+        LDAA BIN1                         ; Verificando si BIN1 es AA o BB
+        CMPA #$BB
+        BEQ CONV_BIN_BCD_guardar_bin1
+        CMPA #$AA
+        BEQ CONV_BIN_BCD_guardar_bin1
+        JSR BIN_BCD                       ; Calculando numero en BCD
+        BRCLR BCD_L,$F0,CONV_BIN_BCD_borrar_1_display ; Verificando si hay que apagar algun display
+        BRA CONV_BIN_BCD_guardar_bcd_l
+CONV_BIN_BCD_borrar_1_display:      ; Poniendo B en el display que debe apagarse
+        BSET BCD_L,%10110000
+        BCLR BCD_L,%01000000
+        BRA CONV_BIN_BCD_guardar_bcd_l
+CONV_BIN_BCD_guardar_bin1:             ; Copia AA o BB en BCD1 segun corresponga
+        MOVB BIN1,BCD1
+        BRA CONV_BIN_BCD_analizar_bin2
+CONV_BIN_BCD_guardar_bcd_l:           ;Guardando el dato en BCD1
+        MOVB BCD_L,BCD1
+
+CONV_BIN_BCD_analizar_bin2: ; Repite el proceso anterior con BIN2
+        LDAA BIN2                         ; Verificando si BIN1 es AA o BB
+        CMPA #$BB
+        BEQ CONV_BIN_BCD_guardar_bin2
+        CMPA #$AA
+        BEQ CONV_BIN_BCD_guardar_bin2
+        JSR BIN_BCD                       ; Calculando numero en BCD
+        BRCLR BCD_L,$F0,CONV_BIN_BCD_borrar_1_display2 ; Verificando si hay que apagar algun display
+        BRA CONV_BIN_BCD_guardar_bcd_2
+CONV_BIN_BCD_borrar_1_display2:      ; Poniendo B en el display que debe apagarse
+        BSET BCD_L,%10110000
+        BCLR BCD_L,%01000000
+        BRA CONV_BIN_BCD_guardar_bcd_2
+CONV_BIN_BCD_guardar_bin2:             ; Copia AA o BB en BCD1 segun corresponga
+        MOVB BIN2,BCD2
+        BRA CONV_BIN_BCD_retornar
+CONV_BIN_BCD_guardar_bcd_2:           ;Guardando el dato en BCD1
+        MOVB BCD_L,BCD2
+CONV_BIN_BCD_retornar:
+        RTS
+
+
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
@@ -832,6 +855,34 @@ FIN_MUX_TECLADO:                                 ; Retornando
 
 
 
+;*******************************************************************************
+;                                SUBRUTINA PATRON_LEDS
+;*******************************************************************************
+;Descripcion:
+
+
+PATRON_LEDS:
+        BRSET BANDERAS,$10,PATRON_LEDS_desplazar_leds ;
+        LDAA #$07            ; Asegurando que no este puesto el patron de emergencia
+        ANDA LEDS
+        STAA LEDS
+        RTS
+PATRON_LEDS_desplazar_leds:            ; Logica de patron de emergencia
+        LDAA #$F8
+        ANDA LEDS
+        LSRA
+        CMPA #4
+        BLS PATRON_LEDS_reiniciar_patron  ; De nuevo se enciende el LED pb7
+        LDAB #$07            ; Guardanto en Leds el nuevo led encendido
+        ANDB LEDS
+        ABA
+        STAA LEDS
+        RTS
+PATRON_LEDS_reiniciar_patron:
+        BSET LEDS,$80
+        BCLR LEDS,$08
+        RTS
+;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
 
@@ -857,10 +908,6 @@ RTI_ISR:        ; Teclado
                 BEQ FIN_RTI_ISR_cont_reb
                 DEC CONT_REB      ; decrementando contador de rebotes
 FIN_RTI_ISR_cont_reb:                  ; Timer cuenta (modo run)
-                TST TIMER_CUENTA      ; Si contador de rebotes es 0, no hace nada
-                BEQ FIN_RTI_ISR_timer_cuenta
-                DEC TIMER_CUENTA
-FIN_RTI_ISR_timer_cuenta:
                 RTI
 
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
@@ -890,35 +937,25 @@ PHO_ISR:
                 BRSET PIFH,$04,PTH2
                 BRSET PIFH,$08,PTH3
 PTHO:
-        CLR CUENTA
+
         BSET PIFH,$01     ; Desactivando interrupcion
         RTI
         
         
 PTH1:
-        CLR ACUMUL
+
         BSET PIFH,$02     ; Desactivando interrupcion
         RTI
         
         
 PTH2:
-        LDAA BRILLO        ; sumando 5 al brillo si no es 100
-        CMPA #100
-        BHS PTH2_final
-        ADDA #5
-        STAA BRILLO
-PTH2_final:
+
         BSET PIFH,$04     ; Desactivando interrupcion
         RTI
         
         
 PTH3:
-        TST BRILLO       ; restando 5 a brillo si no es 0
-        BLS PTH3_fin
-        LDAA BRILLO
-        SUBA #5
-        STAA BRILLO
-PTH3_fin:
+
         BSET PIFH,$08     ; Desactivando interrupcion
         RTI
         
@@ -951,7 +988,7 @@ PTH3_fin:
 OC4_ISR:
         LDX #DISP1
         LDAA #100                 ;Verificando si el contador de tics ya
-        CMPA CONT_TICKS            ; llego a 125.
+        CMPA CONT_TICKS            ; llego a 100.
         BEQ OC4_ISR_tic_maximo
         INC CONT_TICKS             ; Iincrementando contador de tics
         BRA OC4_ISR_continuar1
@@ -1000,16 +1037,99 @@ OC4_ISR_continuar23:
         ADDD #1                       ; sumando 1 a CONT_7SEG
         STD CONT_7SEG                 ; Guaradndolo
         BRA OC4_ISR_continuar3
-OC4_ISR_llamar:
+OC4_ISR_llamar:                       ; Cada 100ms se actualizan los datos de los display
         MOVW #0,CONT_7SEG
+        JSR CONV_BIN_BCD
         JSR BCD_7SEG
 OC4_ISR_continuar3:                    ; Decrementando contador de delay si no es 0
         TST CONT_DELAY
-        BEQ OC4_ISR_retornar
+        BEQ OC4_ISR_continuar4
         DEC CONT_DELAY
+OC4_ISR_continuar4:
+
+        LDD CONT_200                ; Calculando si ya pasaron 100ms
+        CPD #10000
+        BEQ OC4_ISR_llamar2
+        ADDD #1                       ; sumando 1 a CONT_7SEG
+        STD CONT_200                 ; Guaradndolo
+        BRA OC4_ISR_retornar
+OC4_ISR_llamar2:                       ; Cada 100ms se actualizan los datos de los display
+        MOVW #0,CONT_200
+        JSR PATRON_LEDS
+        ;MOVB #%10000111,ATD0CTL5
+        
 OC4_ISR_retornar:
         LDD TCNT                       ; Guardando en TC4 la siguiente interrupcion
-        ADDD #480
+        ADDD #60
         STD TC4
         RTI
+;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
+
+
+
+
+
+;*******************************************************************************
+;                                INTERRUPCION ATD_ISR
+;*******************************************************************************
+;Descripcion: Esta subrutina se encarga de leer 6 valores guardados en los reg
+; del convertidor analogico a digital en el cual esta conectado el potenciometro
+; y hacer un promedio de los mismos que es guardado en la variable POT. Por
+; ultimo se calcula el valor de 0 a 100 (en intervalos de 5 en 5) del brillo
+; a ser mostrado en los display, este brillo es guardado en la variable BRILLO.
+
+ATD_ISR:
+        LDD ADR00H      ; Haciendo un promedio de los valores del CAD que esta
+        ADDD ADR01H     ; leyendo el potenciometro
+        ADDD ADR02H
+        ADDD ADR03H
+        ADDD ADR04H
+        ADDD ADR05H
+        
+        LDX #6          ; Calculando promedio entre los 6 datos
+        IDIV
+        TFR x,d         ; Pasando resultado a D
+        
+        ADCB #0         ; Redondeando
+        ADCA #0
+        
+        STD POT
+        
+        LDAA #20        ; Calculando el valor de brillo
+        MUL             ; 20 * POT
+        
+        LDX #255
+        IDIV            ; (20 * POT) / 255
+        TFR x,d         ; Pasando resultado a D
+        
+        LDAA #5         ; Calculando resultado de brillo en escala de 0 a 100
+        MUL             ;( (20 * POT) / 255 ) * 5
+        STAB BRILLO
+
+
+        MOVB #%10000111,ATD0CTL5
+        RTI
+
+;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
+
+
+
+
+
+
+
+
+
+
+
+;*******************************************************************************
+;                                INTERRUPCION TCNT_ISR
+;*******************************************************************************
+;Descripcion:
+
+TCNT_ISR:
+        RTI
+
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
