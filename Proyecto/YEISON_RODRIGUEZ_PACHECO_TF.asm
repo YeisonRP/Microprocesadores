@@ -272,19 +272,7 @@ continuar_main:
         BCLR PIEH,$09           ; Desactivando interrupcion PH0,PH3
         BCLR TSCR2,$80         ; Desactivando interrupcion TO
         BRCLR PTIH,$C0,mod_config ; Revisando por pulling si esta en modo CONF
-; MODO LIBRE
-        BRSET BANDERAS,$40,mod_libre_actualizar_lcd
-        BRA mod_libre_no_actualizar_lcd
-mod_libre_actualizar_lcd:
-        BSET LEDS,$04           ; Encendiendo el led correspondiente de modo libre
-        BCLR LEDS,$03
-        LDX #Msj_libre_1       ; Cargando LCD
-        LDY #Msj_libre_2
-        JSR CARGAR_LCD
-        MOVB #$BB,BIN1
-        MOVB #$BB,BIN2          ; Cargando 0s en displays de la izq
-mod_libre_no_actualizar_lcd:
-        ;JSR LIBRE               ; Modo libre
+        JSR LIBRE ; MODO LIBRE
         BRA Main                ; Retorna al main
         
 mod_config:
@@ -313,6 +301,31 @@ mod_medicion:
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
+
+
+;*******************************************************************************
+;                             SUBRUTINA LCD
+;*******************************************************************************
+;Descripcion: Esta subrutina inicializa la subrutina LCD
+
+LIBRE:
+        BRSET BANDERAS,$40,mod_libre_actualizar_lcd
+        RTS
+mod_libre_actualizar_lcd:
+        BSET LEDS,$04           ; Encendiendo el led correspondiente de modo libre
+        BCLR LEDS,$03
+        LDX #Msj_libre_1       ; Cargando LCD
+        LDY #Msj_libre_2
+        JSR CARGAR_LCD
+        MOVB #$BB,BIN1
+        MOVB #$BB,BIN2          ; Cargando 0s en displays de la izq
+        BCLR BANDERAS,$40       ; Borrando bandera cambio modo
+        RTS
+;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
+
+
+
 ;*******************************************************************************
 ;                             SUBRUTINA LCD
 ;*******************************************************************************
@@ -335,6 +348,8 @@ FIN_Loop_lcd_inic:
         MOVB D2ms,CONT_DELAY
         JSR DELAY
         RTS
+;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
 
 
 
