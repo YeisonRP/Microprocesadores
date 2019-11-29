@@ -90,7 +90,7 @@ POT:            ds 1        ; Es el valor leido en el potenciometro.
 TICK_EN:        ds 2
 TICK_DIS:       ds 2
 
-        ; 1010 ---- 101F
+        ; 1011 ---- 101F
 VELOC:          ds 1
 TICK_VEL:       ds 1
 BIN1:           ds 1
@@ -148,6 +148,14 @@ Msj_libre_1:    fcc "  RADAR   623   "
         db EOM
 Msj_libre_2:    fcc "  MODO LIBRE    "
         db EOM
+Msj_medicion_1:    fcc " MODO MEDICION  "
+        db EOM
+Msj_medicion_calculando_2:    fcc "  CALCULANDO... "
+        db EOM
+Msj_medicion_esperando_2:    fcc "  ESPERANDO...  "
+        db EOM
+Msj_medicion_su_vel_vel_lim_2:    fcc "SU VEL. VEL.LIM "
+        db EOM
 
 #include registers.inc
 
@@ -167,7 +175,7 @@ Msj_libre_2:    fcc "  MODO LIBRE    "
         
         ; Vector de interrupcion de key wakeups
         ORG $3e4c
-        dw PHO_ISR
+        dw CALCULAR
         
         ORG $3E52       ;ATD
         dw ATD_ISR
@@ -214,8 +222,8 @@ ATD_wait:
 ;        bset PIEH,$09           ; Activando interrupcion PH0,PH3
 
         ;Inicializacion de Output compare canal 4 y Timmer overflow interrupt.
-        BSET TSCR1,$90 ; TEN = 1 , TFFCA = 1. Habilitando modulo timers y el borrado rapido
-        BSET TSCR2, $03 ;BSET TSCR2, $83 Preescalador = 8
+        BSET TSCR1,$80 ; TEN = 1 , Habilitando modulo timers
+         BSET TSCR2, $03 ;BSET TSCR2, $83 Preescalador = 8
 
         BSET TIE,$10    ; Habilitando interrupcion output compare canal 4
         BSET TIOS,$10   ; Pone como salida canal 4
@@ -243,6 +251,7 @@ ATD_wait:
         CLR CONT_TCL
         ; DISPLAYS
         CLR V_LIM
+        CLR VELOC
         CLR CONT_DIG
         CLR CONT_TICKS
         CLR BRILLO
@@ -267,8 +276,9 @@ Main:
         BSET BANDERAS,$40
 continuar_main:
         MOVB PTIH,MODO_ANTERIOR
-        
+
         BRSET PTIH,$C0,mod_medicion ; Revisando por pulling si esta en modo Med
+        clr VELOC
         BCLR PIEH,$09           ; Desactivando interrupcion PH0,PH3
         BCLR TSCR2,$80         ; Desactivando interrupcion TO
         BRCLR PTIH,$C0,mod_config ; Revisando por pulling si esta en modo CONF
@@ -282,7 +292,7 @@ mod_config_actualizar_lcd:
         LDX #Msj_config_1       ; Cargando LCD
         LDY #Msj_config_2
         JSR CARGAR_LCD
-        MOVB #$BB,BIN2          ; Cargando 0s en displays de la izq
+        ;MOVB #$BB,BIN2          ; Cargando 0s en displays de la izq
         BSET LEDS,$01           ; Encendiendo el led correspondiente
         BCLR LEDS,$06
         BCLR BANDERAS,$40       ; Borrando bandera cambio modo
@@ -291,13 +301,120 @@ mod_config_no_actualizar_lcd:
         BRA Main                ; Retorna al main
 
 mod_medicion:
-        BCLR BANDERAS,$40       ;CAMBIO MODO NO SE OCUPA AQUI
+        BRSET BANDERAS,$40,mod_medicion_actualizar_lcd
+        BRA mod_medicion_no_actualizar_lcd
+mod_medicion_actualizar_lcd:
+;        LDX #Msj_medicion_1       ; Cargando LCD
+;        LDY #Msj_medicion_esperando_2
+;        JSR CARGAR_LCD
+;        BCLR BANDERAS,$40       ;CAMBIO MODO NO SE OCUPA AQUI
         BSET LEDS,$02           ; Encendiendo el led correspondiente
         BCLR LEDS,$05
         BSET PIEH,$09           ; Activando interrupcion PH0,PH3
         BSET TSCR2, $80         ; Activando interrupcion TO
-        ;JSR MEDICION
+mod_medicion_no_actualizar_lcd:
+        JSR MODO_MEDICION
         LBRA Main                ; Retorna al main
+;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
+
+
+
+
+
+
+
+;*******************************************************************************
+;                             SUBRUTINA MODO_MEDICION
+;*******************************************************************************
+
+MODO_MEDICION:
+        TST VELOC                    ; Si velocidad es 0, termina
+        BEQ MODO_MEDICION_retornar
+        JSR PANT_CTRL
+        RTS
+MODO_MEDICION_retornar:
+        LDAA #$BB
+        STAA BIN1
+        STAA BIN2
+        RTS
+;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
+
+
+;*******************************************************************************
+;                             SUBRUTINA PANT_CTRL
+;*******************************************************************************
+
+PANT_CTRL:
+        BCLR PIEH,$09           ; Desactivando interrupcion PH0,PH3
+        LDAA VELOC                  ; Verificando si VELOC es valida
+        CMPA #30
+        BLO PANT_CTRL_vel_no_valida
+        CMPA #99
+        BHI PANT_CTRL_vel_no_valida
+        CMPA V_LIM              ; Verificando si es mayor a la velocidad maxima
+        BLO PANT_CTRL_calcular_ticks
+        BSET BANDERAS,$10  ; ALARMA <-- 1
+PANT_CTRL_calcular_ticks:
+        BRSET BANDERAS,$20,PANT_CTRL_control_pantalla  ; SI CALC_TICKS es 0 sigue
+        LDAB VELOC      ; DIVISOR
+        CLRA
+        TFR D,X
+        LDD #16479         ; Calculo de tiempo (ver hoja de calculo informe)
+        IDIV              ; Calculo de  tiempo
+        TFR X,D
+        STD TICK_EN        ;guardando tiempo habilitacion
+        LDAB VELOC      ; DIVISOR
+        CLRA
+        TFR D,X
+        LDD #32958         ; Calculo de tiempo (ver hoja de calculo informe)
+        IDIV              ; Calculo de  tiempo
+        TFR X,D
+        STD TICK_DIS        ;guardando tiempo habilitacion
+        ;LSLD               ; TICK_EN * 2
+        ;STD TICK_DIS
+        BSET BANDERAS,$20  ; CALC_TICKS = 1, para que solo se haga una vez
+        BRA PANT_CTRL_control_pantalla
+PANT_CTRL_vel_no_valida:   ; Si la velocidad no es valida, para imrpimir guiones 2 seg
+        LDAA #$AA
+        CMPA VELOC
+        BEQ PANT_CTRL_control_pantalla
+        MOVW #$0001,TICK_EN     ; Habilitando 2 segundos
+        MOVW #$005B,TICK_DIS
+        MOVB #$AA,VELOC     ; Para no volver a entrar aqui
+        
+PANT_CTRL_control_pantalla: ; Demas logica de la pantalla
+        BRCLR BANDERAS,$08,PANT_CTRL_pant_encendida ; si pant_flh es 0 salta
+        LDAA #$BB                   ; Verificando si ya se imprimio la pantalla 1 vez
+        CMPA BIN1
+        BEQ PANT_CTRL_pant_vel_encendida
+        RTS
+PANT_CTRL_pant_vel_encendida: ; Se pone la vel lim y la velocidad
+        LDX #Msj_medicion_1       ; Cargando LCD
+        LDY #Msj_medicion_su_vel_vel_lim_2
+        JSR CARGAR_LCD
+        MOVB V_LIM,BIN1       ; Cargando valores a displays
+        MOVB VELOC,BIN2
+        RTS
+        
+PANT_CTRL_pant_encendida:
+        LDAA #$BB                   ; Verificando si ya se llego de PANT_FLH = 1
+        CMPA BIN1
+        BNE PANT_CTRL_ultimo_ciclo
+        RTS
+PANT_CTRL_ultimo_ciclo:
+        LDX #Msj_medicion_1       ; Cargando LCD
+        LDY #Msj_medicion_esperando_2
+        JSR CARGAR_LCD
+        LDAA #$BB                ; Dejando variables listas por ser ultimo ciclo
+        STAA BIN1
+        STAA BIN2
+        CLR VELOC
+        BSET PIEH,$09           ; Activando interrupcion PH0,PH3
+        BCLR BANDERAS,$30       ; CALC_TICKS = 0 y ALERTA = 0
+PANT_CTRL_retornar:
+        RTS
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
@@ -942,37 +1059,49 @@ FIN_RTI_ISR_cont_reb:                  ; Timer cuenta (modo run)
 ;                                INTERRUPCION PHO_ISR
 ;*******************************************************************************
 ;Descripcion: Esta interrupcion se divide en 4 subrunitas:
-; PTH0: Borra CUENTA
-; PTH1: Borra ACUMUL
-; PTH2: Decrementa el brillo de los display de 7 segmentos
-; PTH3: Incrementa el brillo de los display de 7 segmentos
-PHO_ISR:
-                BRSET PIFH,$01,PTHO
-                BRSET PIFH,$02,PTH1
-                BRSET PIFH,$04,PTH2
-                BRSET PIFH,$08,PTH3
-PTHO:
+; PTH0:
 
+; PTH3:
+CALCULAR:
+                BRSET PIFH,$01,PTH0
+                BRSET PIFH,$08,PTH3
+
+                
+PTH0:
+        TST CONT_REB      ;Control de rebotes
+        BNE PTH0_retornar
+        LDAA #20          ; Para controlar rebotes
+        STAA CONT_REB
+        LDAB TICK_VEL      ; DIVISOR
+        CLRA
+        TFR D,X
+        LDD #6624         ; Calculo de velocidad (ver hoja de calculo informe)
+        IDIV              ; Calculo de la velocidad
+        TFR X,D
+        STAB VELOC         ;guardando velocidad
+        CLR TICK_VEL
+PTH0_retornar:
         BSET PIFH,$01     ; Desactivando interrupcion
         RTI
-        
-        
-PTH1:
-
-        BSET PIFH,$02     ; Desactivando interrupcion
-        RTI
-        
-        
-PTH2:
-
-        BSET PIFH,$04     ; Desactivando interrupcion
-        RTI
-        
-        
+                
+                
 PTH3:
-
+        TST CONT_REB      ;Control de rebotes
+        BNE PTH3_retornar
+        LDAA #20          ; Para controlar rebotes
+        STAA CONT_REB
+        CLR TICK_VEL
+        LDX #Msj_medicion_1   ; Cargando LCD
+        LDY #Msj_medicion_calculando_2
+        BSET PIFH,$08     ; Desactivando interrupcion
+        CLI               ; activando interrupciones
+        JSR CARGAR_LCD
+PTH3_retornar:
         BSET PIFH,$08     ; Desactivando interrupcion
         RTI
+        
+        
+
         
         
 
@@ -1042,10 +1171,7 @@ OC4_ISR_continuar1:
         BNE OC4_ISR_continuar2
         MOVB #$FF,PTP             ; Se apaga el display
         BSET PTJ,$02              ; disable leds
-OC4_ISR_continuar2:
-        BRCLR BANDERAS,$10,OC4_ISR_continuar23    ; Apagando dos display en modo config
-        BSET PTP,$03
-OC4_ISR_continuar23:
+OC4_ISR_continuar2
         LDD CONT_7SEG                 ; Calculando si ya pasaron 100ms
         CPD #5000
         BEQ OC4_ISR_llamar
@@ -1077,6 +1203,7 @@ OC4_ISR_retornar:
         LDD TCNT                       ; Guardando en TC4 la siguiente interrupcion
         ADDD #60
         STD TC4
+        BSET TFLG1,$10  ; Borrando bandera interrupcion
         RTI
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
@@ -1106,10 +1233,10 @@ ATD_ISR:
         IDIV
         TFR x,d         ; Pasando resultado a D
         
-        ADCB #0         ; Redondeando
-        ADCA #0
+        ;ADCB #0         ; Redondeando
+        ;ADCA #0
         
-        STD POT
+        STAB POT
         
         LDAA #20        ; Calculando el valor de brillo
         MUL             ; 20 * POT
@@ -1145,6 +1272,24 @@ ATD_ISR:
 ;Descripcion:
 
 TCNT_ISR:
+        INC TICK_VEL
+        LDD TICK_EN     ; Verificando si TICK_EN llego a 0, sino lo decrementa
+        BEQ TCNT_ISR_set_pant_flag
+        SUBD #1
+        STD TICK_EN
+        BRA TCNT_ISR_continuar
+TCNT_ISR_set_pant_flag:
+        BSET BANDERAS, $08      ; Pantflag = 1
+TCNT_ISR_continuar:
+        LDD TICK_DIS     ; Verificando si TICK_EN llego a 0, sino lo decrementa
+        BEQ TCNT_ISR_clear_pant_flag
+        SUBD #1
+        STD TICK_DIS
+        BRA TCNT_ISR_retornar
+TCNT_ISR_clear_pant_flag:
+        BCLR BANDERAS, $08      ; Pantflag = 0
+TCNT_ISR_retornar:
+        BSET TFLG2,$80  ; Borrando bandera interrupcion
         RTI
 
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
