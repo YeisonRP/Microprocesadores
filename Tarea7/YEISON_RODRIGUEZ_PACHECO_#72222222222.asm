@@ -58,7 +58,9 @@ Msj_reloj:    fcc "     RELOJ      "
 Msj_despertador:    fcc " DESPERTADOR 623"
         db EOM
 
-
+CONT_REB:       ds 1
+CONT_TCL:       ds 1
+PATRON:         ds 1
 #include registers.inc
 
 
@@ -411,26 +413,24 @@ BCD_7SEG_FIN:
 ;Descripcion: Esta interrupcion se encarga de decrementar la variable CONT_REB en 1
 ; cada 1 ms aproximadamente, si CONT_REB es cero la subrutina no hace nada.
 
-RTI_ISR:        ; Teclado
-                ;cli
-                BSET CRGFLG,#$80
-                LDAA CONT_RTI
-                CMPA #5
-                BEQ RTI_ISR_paso_1_segundo
-                INC CONT_RTI                ; Incrementando y retornando
-                RTI
-                
-RTI_ISR_paso_1_segundo:
-                CLR CONT_RTI
-                LDX #T_Read_RTC         ; Guardando minutos y horas
-                MOVB 1,X+,BCD1
-                MOVB 1,X+,BCD2
-                BSET BANDERAS,$01       ; RTC_RW = 1
-                MOVB Dir_WR,IBDR        ; Direccion de escritura
-                BSET IBCR,$10           ; Transmision
-                BSET IBCR,$20           ; START
-                RTI
+                loc
+RTI_ISR:        bset CRGFLG, $80
+                tst CONT_REB
+                beq checkREAD
+                dec CONT_REB
+checkREAD:      tst CONT_RTI        ;Se verifica que el contador llegue a 0 es decir 1 s
+                beq initREAD
+                dec CONT_RTI
+                bra return`
+initREAD:       movb #20,CONT_RTI   ;Reset contador
+                ;INICIO de comunicaciones en LECTURA
+                bset BANDERAS,$01 ; MODOLectura
+                movb Dir_WR,IBDR                ;Mando la direccion de escritura para resetear el puntero de memoria DS1307
+                ;movb #$F0,IBCR                 ;IBEN 1, IBIE 1 MS 1(START), TX 1 txak 0(Para calling address no importa),RSTA 0
+                bset IBCR,$30
+                movb #$00,Index_RTC             ;Index en 0
 
+return`         rti
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
@@ -452,47 +452,83 @@ RTI_ISR_paso_1_segundo:
 ; PTH1: Borra ACUMUL
 ; PTH2: Decrementa el brillo de los display de 7 segmentos
 ; PTH3: Incrementa el brillo de los display de 7 segmentos
-PHO_ISR:
-                BRSET PIFH,$01,PTHO
-                BRSET PIFH,$02,PTH1
-                BRSET PIFH,$04,PTH2
-                BRSET PIFH,$08,PTH3
-PTHO:
-        BSET IBCR,%11010000  ; Activa modulo, interrupcion,pone a transmitir
-        MOVB #$1F,IBFD      ; Del calculo de la tabla
-        MOVB Dir_WR,IBDR    ; Direccion de escritura del RTC
-        Bset BANDERAS,$01 ;BCLR BANDERAS,$01   ; RTC_RW = 0
-        BSET IBCR,%00100000  ; START
-        BSET PIFH,$01     ; Desactivando interrupcion
-        RTI
+
+                 loc
+PHO_ISR:        brset PIFH,$01,PH0_ISR
+                brset PIFH,$02,PH1_ISR
+                brset PIFH,$04,PH2_ISR
+                brset PIFH,$08,PH3_ISR
+
+;       subrutina PH1
+;################################################################################################################################################
+;Descripcion:
 
 
-PTH1:
-        BCLR TIOS,$20   ; Desactiva interrupcion de OC5
-        BSET PIFH,$02     ; Desactivando interrupcion
-        RTI
+;Paso de parametros:
+;Entrada:
+;Salida:
+;################################################################################################################################################
+PH0_ISR:        bset PIFH, $01
+                tst CONT_REB
+                bne returnPH
+                brset BANDERAS,$01,returnPH     ;Si ya se configuro la hora no se vuelve a hacer
+                movb #2,CONT_REB
+                ;INICIO de comunicaciones en escritura
+                bclr BANDERAS,$80 ;MODOEscritura
+                movb Dir_WR,IBDR               ;Se envia direccion de escritura
+                movb #$F0,IBCR                 ;IBEN 1, IBIE 1 MS 1(START), TX 1 txak 0(Para calling address no importa),RSTA 0
+                bset BANDERAS,$08
+                ;bset IBCR,$30
+                clr Index_RTC             ;Index en 0
+                bra returnPH
+
+;       subrutina PH1
+;################################################################################################################################################
+;Descripcion:
 
 
-PTH2:
-        LDAA BRILLO        ; sumando 5 al brillo si no es 100
-        CMPA #100
-        BHS PTH2_final
-        ADDA #5
-        STAA BRILLO
-PTH2_final:
-        BSET PIFH,$04     ; Desactivando interrupcion
-        RTI
+;Paso de parametros:
+;Entrada:
+;Salida:
+;################################################################################################################################################
+PH1_ISR:        bset PIFH, $02
+                tst CONT_REB
+                bne returnPH
+                movb #2,CONT_REB
+                movb #$10, TIOS
+                movb #$10, TIE      ;Se deshabilitan las interrupciones de OC5
+returnPH:       rti
+;       subrutina PH2
+;################################################################################################################################################
+;Descripcion:
 
 
-PTH3:
-        TST BRILLO       ; restando 5 a brillo si no es 0
-        BLS PTH3_fin
-        LDAA BRILLO
-        SUBA #5
-        STAA BRILLO
-PTH3_fin:
-        BSET PIFH,$08     ; Desactivando interrupcion
-        RTI
+;Paso de parametros:
+;Entrada:
+;Salida:
+;################################################################################################################################################
+PH2_ISR:        bset PIFH, $04
+                ldaa BRILLO
+                beq returnPH
+                suba #5
+                staa BRILLO
+                bra returnPH
+;       subrutina PH3
+;################################################################################################################################################
+;Descripcion:
+
+
+;Paso de parametros:
+;Entrada:
+;Salida:
+;################################################################################################################################################
+PH3_ISR:        bset PIFH, $08
+                ldaa BRILLO
+                cmpa #100
+                beq returnPH
+                adda #5
+                staa BRILLO
+                bra returnPH
 
 
 
@@ -617,31 +653,23 @@ IIC_ISR_WRITE_RTC:
 ;*******************************************************************************
 ;                                SUBRUTINA WRITE_RTC
 ;*******************************************************************************
-
-Write_RTC:
-                ;brset IBSR,$01,ULTIMOBYTE_W
-
+                loc
+WRITE_RTC:      brset IBSR,$02,error_wrtc       ;No se recibe el ack
                 ldaa Index_RTC
-                bne ESCRITURA
-                movb DIR_SEG,IBDR        ; Se posiciona en la direccion de escritura
-                bra W_RET
-
-
-ESCRITURA:      deca
-                cmpa #6
-                beq ULTIMOBYTE_W
-                ldx #T_Write_RTC
-                movb a,x,IBDR
-                bra W_RET
-
-ULTIMOBYTE_W:   bset Banderas,$04
-                rts
+                bne next`
+                movb Dir_Seg,IBDR       ;Mandar la direccion de la primera palabra es decir segundos
+                bra return_wrtc
+next`           deca                    ;offset de -1 porque se toma en cuenta el envio de la direccion
+                ldx #T_WRITE_RTC
+                movb A,X,IBDR           ;Mandar el dato correspondiente segun el index
+                cmpa #5                 ;Es el ultimo dato?
+                bne return_wrtc
                 bclr IBCR,$20
-
-
-W_RET           inc Index_RTC
+                ;Bset IBCR,#$40 ;TXAK <- 1
+return_wrtc:    inc Index_RTC
                 rts
-
+error_wrtc:     movb #$FF,LEDS                  ;Enciende todos los leds como alarma
+                bra return_wrtc
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
@@ -649,45 +677,37 @@ W_RET           inc Index_RTC
 ;*******************************************************************************
 ;                                SUBRUTINA READ_RTC
 ;*******************************************************************************
+loc
+READ_RTC:       ldaa Index_RTC
+                bne next0`          ;Primera?
+                movb Dir_Seg,IBDR       ;Se envia la direccion a leer (Segundos)
+                bra return_rrtc
+next0`          cmpa #1             ;Segunda?
+                bne next1`
+                bset IBCR,$04       ;Repeate start
+                movb Dir_RD,IBDR
+                bra return_rrtc
+next1`          cmpa #2             ;Tercera?
+                bne next2`
+                bclr IBCR,$1C       ;Borra repeated start y pasa a modo rx y pone en 0 el ack por seguridad
+                ldab IBDR           ;Lectura dummy
+                bra return_rrtc
+next2`          cmpa #9             ;Ultimo lista?
+                bne next3`
+                bclr IBCR,$28       ;borra el no ack (8) y manda señal de stop (2)
+                bset IBCR,$10       ;pasa a modo tx
+                bra return_rrtc
+next3`          cmpa #8             ;Penultima?     FIXME: esto significa que no se lee el ultimo dato?
+                bne next4`
+                bset IBCR,$08       ;Pone un no ack
+next4`          deca
+                deca
+                deca                ;A -3 porque se consideran las primeras 3 interrupciones en el index
+                ldx #T_Read_RTC
+                movb IBDR,A,X       ;Se mueve el dato a la posicion deseada
 
-READ_RTC:
-        LDAA Index_RTC
-        INC Index_RTC
-        CMPA #0
-        BEQ READ_RTC_primer_dato
-        CMPA #1
-        BEQ READ_RTC_segundo_dato
-        CMPA #2
-        BEQ READ_RTC_tercer_dato
-        CMPA #9
-        BEQ READ_RTC_ultimo_dato
-        CMPA #8
-        BNE READ_RTC_no_es_penultimo_dato
-        BSET IBCR,$08
-READ_RTC_no_es_penultimo_dato:
-        LDX #T_Read_RTC
-        DECA              ; Por el desfase de los anteriores 3 ciclos
-        DECA
-        DECA
-        MOVB IBDR,A,X    ; Guardando dato en donde debe ir
-        RTS
-READ_RTC_primer_dato:
-        MOVB DIR_SEG,IBDR         ;Envia la direccion de los segundos
-        RTS
-READ_RTC_segundo_dato:
-        BSET IBCR,$04
-        MOVB DIR_RD,IBDR
-        RTS
-READ_RTC_tercer_dato:
-        BCLR IBCR,$0C
-        BCLR IBCR,$10
-        LDAB IBDR
-        RTS
-READ_RTC_ultimo_dato:
-        BCLR IBCR,$28
-        BSET IBCR,$10
-        CLR Index_RTC
-        BRA READ_RTC_no_es_penultimo_dato ; Para mandarlo a guardar el dato
+return_rrtc     inc Index_RTC
+                rts
 
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
         

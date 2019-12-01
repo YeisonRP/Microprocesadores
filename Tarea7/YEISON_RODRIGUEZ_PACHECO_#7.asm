@@ -4,12 +4,23 @@
 ;*******************************************************************************
 ;                                                                              *
 ;       UNIVERSIDAD DE COSTA RICA                                              *
-;       FECHA                                                          *
+;       FECHA 04/12/19                                                         *
 ;       AUTOR: YEISON RODRIGUEZ PACHECO B56074                                 *
 ;       COREREO: yeisonrodriguezpacheco@gmail.com                              *
 ;                                                                              *
 ;                                                                              *
-; Descripcion:                                                                      *
+; Descripcion: Esta tarea consiste en un reloj que tiene una alarma. La alarma
+; se programa en tiempo de ensamblado en la constante de un byte llamada ALARMA,
+; dicha constante tiene como formato MM:HH minutos horas.
+; Al llegar el reloj al valor de ALARMA (leyendo el RTC cada cierto tiempo), se
+; activara una alarma que producira un sonido, ademas de que las luces led
+; se moveran de derecha a izquiera rapidamente. Al presionar el boton ph1 la
+; alarma se silencia.
+; Para resetear la hora (se pone igual a la hora indicada en la variable llamad
+; T_Write_RTC) se debe presionar el boton ph0. Los botones ph2 y ph3 controlan
+; la intensidad del brillo de la pantalla.
+; En la LCD de se mostrara el mensaje : Reloj Despertador 623.
+;
 ;* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 
 
@@ -20,7 +31,10 @@ EOM:     EQU $FF
         ORG $1000
         
 CONT_RTI:       ds 1
-BANDERAS:       ds 1        ;COMANDO_DATO:X:X:X:X:X:X:RTC_RW
+BANDERAS:       ds 1        ;COMANDO_DATO:X:X:ALARMA_LEDS:ALARMA:X:X:RTC_RW
+   		            ;ALARMA_LEDS en 1 enciende los leds,
+   			    ;ALARMA en 0 apaga la alarma, es controlado por ph0 y ph1
+   		            ;RTC_RW 1 escribe 0 lee el RTC
 BRILLO:         ds 1        ; Brillo de los leds, se sube de 5 en 5. Va de 0 a 100 es la
 CONT_DIG:       ds 1        ; Cuenta  El digito que se va a encenter
 CONT_TICKS:     ds 1        ; Cuenta tiks del Output compare, va de 0 a 100
@@ -49,8 +63,10 @@ Dir_WR:         db $D0
 Dir_RD:         db $D1
 Dir_Seg:        db $00
 ALARMA:         dW $0409 ; mm:hh MINUTOS Y HORAS
-T_Write_RTC:    db $00,$03,$09,$01,$05,$12,$19  ; 0 segundos, 03 minutos, 09 h, dia 1, date = 04, mes 12 y a;o 19
-T_Read_RTC:     ds 7
+        ORG $1030
+T_Write_RTC:    db $30,$03,$09,$01,$05,$12 ; 0 segundos, 03 minutos, 09 h, dia 1, date = 04, mes 12 y a;o 19
+        ORG $1040
+T_Read_RTC:     ds 6
 
 ; MENSAJES
 Msj_reloj:    fcc "     RELOJ      "
@@ -58,9 +74,7 @@ Msj_reloj:    fcc "     RELOJ      "
 Msj_despertador:    fcc " DESPERTADOR 623"
         db EOM
 
-CONT_REB:       ds 1
-CONT_TCL:       ds 1
-PATRON:         ds 1
+
 #include registers.inc
 
 
@@ -116,15 +130,6 @@ PATRON:         ds 1
         ; a 3.45us que es el maximo tiempo que permite la dragon, y tambien es mayor
         ; al minimo tiempo de hold del RTC que es de 0.3us
 
-        ;BSET IBCR,$80 ; Se habilita IIC
-        ;BSET IBCR,$40 ; Se habilita interrupcion IIC
-        ;BSET IBSR,$02 ; Borra bandera interrup
-        ; calling adress IBDR $D0 escribir,
-        ; calling adress, me manda un ack, le mando la direccion de lo que deseo escribir
-        ; y seguidanmente le dato que quiero escribir o los siguientes datos, porque el puntero
-        ; se mueve despues de que cada dato es escrito.. Por ultimo le manda se;al de stop
-        ;
-        ;                BDR $D1 leer
         ;subrutina RTI_ISR:
         movb #$75,RTICTL        ; M = 7 n = 5 interrupcion cada 49.52ms
         bset CRGINT,#$80        ; activa rti
@@ -152,8 +157,6 @@ PATRON:         ds 1
         
 ;INICIALIZACION DE VARIABLES:
         CLI                     ; Activando interrupciones
-
-
         CLR BANDERAS
         CLR Index_RTC
         ; DISPLAYS
@@ -163,6 +166,7 @@ PATRON:         ds 1
         CLR BRILLO
         CLR BCD1
         CLR BCD2
+        CLR LEDS
         MOVW #0,CONT_7SEG
 
         LDD TCNT        ; Inicializa TC4  , esto va mas abajo
@@ -177,15 +181,21 @@ PATRON:         ds 1
         LDX #Msj_reloj       ; Cargando LCD
         LDY #Msj_despertador
         JSR CARGAR_LCD
-; MAIN!!!
-
-
-
-;        BSET TIOS,$20   ; Pone como salida canal 5  BORRAR
+        
+        
+;*******************************************************************************
+;                             MAIN
+;*******************************************************************************
 Main:
-        ;movb #$98,BCD1
-        ;movb #$76, BCD2
-        LBRA Main                ; Retorna al main
+        LDX #T_Read_RTC+1
+        LDD ALARMA
+        CPD 0,X                ; Comparando la hora y minutos con alarma
+        BNE Main
+        BRCLR BANDERAS,$08,Main      ; Bit para que la alarma no vuelva a sonar
+        BSET TIOS,$20           ; Para encender sonido
+        BSET BANDERAS,$10       ; Para encender leds
+        bra Main
+
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
@@ -199,7 +209,7 @@ Main:
 ;*******************************************************************************
 ;                             SUBRUTINA LCD
 ;*******************************************************************************
-;Descripcion: Esta subrutina inicializa la subrutina LCD
+;Descripcion: Esta subrutina inicializa la pantalla LCD
 LCD:
         LDX #iniDsp
 Loop_lcd_inic:
@@ -347,7 +357,8 @@ DELAY:
 ;*******************************************************************************
 ;Descripcion: Esta subrutina pasa valores de BCD1 y BCD2 a DISP1,DISP2,DISP3,
 ; DISP4, en su respectivo codigo de 7 segmentos. Si hay ceros a la izquierda
-; se envia un codigo $fx
+; se envia un codigo $fx. Tambien se encarga de enviar a los display 2 y 3
+; encendido y apagado segun el valor de los segundos leidos del rtc
 
 BCD_7SEG:
         LDX #BCD1          ;Declaracion punteros iniciales
@@ -378,7 +389,11 @@ BCD_7SEG_CONT:
         INX
         DECA
         BRA BCD_7SEG_main_loop
-BCD_7SEG_FIN:
+BCD_7SEG_FIN:                     ; Puntos de los segundos
+        BRCLR T_Read_RTC,$01,BCD_7SEG_FIN_real
+        BSET DISP2,$80
+        BSET DISP3,$80
+BCD_7SEG_FIN_real:
         RTS
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
@@ -410,27 +425,29 @@ BCD_7SEG_FIN:
 ;*******************************************************************************
 ;                                INTERRUPCION RTI_ISR
 ;*******************************************************************************
-;Descripcion: Esta interrupcion se encarga de decrementar la variable CONT_REB en 1
-; cada 1 ms aproximadamente, si CONT_REB es cero la subrutina no hace nada.
+;Descripcion: Esta interrupcion se encarga de incrementar la variable CONT_RTI en 1
+; cada 50 ms aproximadamente, Esta subrutina cada vez que pasa 1 segundo se
+; encarga de mandar una lectura el RTC para que actualice la hora al sistema
 
-                loc
-RTI_ISR:        bset CRGFLG, $80
-                tst CONT_REB
-                beq checkREAD
-                dec CONT_REB
-checkREAD:      tst CONT_RTI        ;Se verifica que el contador llegue a 0 es decir 1 s
-                beq initREAD
-                dec CONT_RTI
-                bra return`
-initREAD:       movb #20,CONT_RTI   ;Reset contador
-                ;INICIO de comunicaciones en LECTURA
-                bset BANDERAS,$01 ; MODOLectura
-                movb Dir_WR,IBDR                ;Mando la direccion de escritura para resetear el puntero de memoria DS1307
-                ;movb #$F0,IBCR                 ;IBEN 1, IBIE 1 MS 1(START), TX 1 txak 0(Para calling address no importa),RSTA 0
-                bset IBCR,$30
-                movb #$00,Index_RTC             ;Index en 0
+RTI_ISR:
+                BSET CRGFLG,#$80
+                LDAA CONT_RTI
+                CMPA #1
+                BEQ RTI_ISR_paso_1_segundo
+                INC CONT_RTI                ; Incrementando y retornando
+                RTI
+                
+RTI_ISR_paso_1_segundo:
+                CLR CONT_RTI
+                LDX #T_Read_RTC         ; Guardando minutos y horas
+                MOVB 1,+X,BCD1
+                MOVB 1,+X,BCD2
+                BSET BANDERAS,$01       ; RTC_RW = 1
+                MOVB Dir_WR,IBDR        ; Direccion de escritura
+                BSET IBCR,$10           ; Transmision
+                BSET IBCR,$20           ; START
+                RTI
 
-return`         rti
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
@@ -448,87 +465,56 @@ return`         rti
 ;                                INTERRUPCION PHO_ISR
 ;*******************************************************************************
 ;Descripcion: Esta interrupcion se divide en 4 subrunitas:
-; PTH0: Borra CUENTA
-; PTH1: Borra ACUMUL
+; PTH0: Inicializa la hora del reloj
+; PTH1: Detiene la alarma
 ; PTH2: Decrementa el brillo de los display de 7 segmentos
 ; PTH3: Incrementa el brillo de los display de 7 segmentos
-
-                 loc
-PHO_ISR:        brset PIFH,$01,PH0_ISR
-                brset PIFH,$02,PH1_ISR
-                brset PIFH,$04,PH2_ISR
-                brset PIFH,$08,PH3_ISR
-
-;       subrutina PH1
-;################################################################################################################################################
-;Descripcion:
-
-
-;Paso de parametros:
-;Entrada:
-;Salida:
-;################################################################################################################################################
-PH0_ISR:        bset PIFH, $01
-                tst CONT_REB
-                bne returnPH
-                brset BANDERAS,$01,returnPH     ;Si ya se configuro la hora no se vuelve a hacer
-                movb #2,CONT_REB
-                ;INICIO de comunicaciones en escritura
-                bclr BANDERAS,$80 ;MODOEscritura
-                movb Dir_WR,IBDR               ;Se envia direccion de escritura
-                movb #$F0,IBCR                 ;IBEN 1, IBIE 1 MS 1(START), TX 1 txak 0(Para calling address no importa),RSTA 0
-                bset BANDERAS,$08
-                ;bset IBCR,$30
-                clr Index_RTC             ;Index en 0
-                bra returnPH
-
-;       subrutina PH1
-;################################################################################################################################################
-;Descripcion:
+PHO_ISR:
+                BRSET PIFH,$01,PTHO
+                BRSET PIFH,$02,PTH1
+                BRSET PIFH,$04,PTH2
+                BRSET PIFH,$08,PTH3
+PTHO:
+        Bset BANDERAS,$08    ; Activa la alarma
+        BSET IBCR,%11010000  ; Activa modulo, interrupcion,pone a transmitir
+        MOVB #$1F,IBFD      ; Del calculo de la tabla
+        MOVB Dir_WR,IBDR    ; Direccion de escritura del RTC
+        BCLR BANDERAS,$01   ; RTC_RW = 0
+        CLR Index_RTC
+        BSET IBCR,%00100000  ; START
+        BSET PIFH,$01     ; Desactivando interrupcion
+        RTI
 
 
-;Paso de parametros:
-;Entrada:
-;Salida:
-;################################################################################################################################################
-PH1_ISR:        bset PIFH, $02
-                tst CONT_REB
-                bne returnPH
-                movb #2,CONT_REB
-                movb #$10, TIOS
-                movb #$10, TIE      ;Se deshabilitan las interrupciones de OC5
-returnPH:       rti
-;       subrutina PH2
-;################################################################################################################################################
-;Descripcion:
+PTH1:
+        Bclr BANDERAS,$08    ; desactiva la alarma
+        BCLR TIOS,$20   ; Desactiva interrupcion de OC5
+        BCLR BANDERAS,$10       ; Para encender leds
+        CLR LEDS        ; Borra los leds
+        BSET PIFH,$02     ; Desactivando interrupcion
+        RTI
 
 
-;Paso de parametros:
-;Entrada:
-;Salida:
-;################################################################################################################################################
-PH2_ISR:        bset PIFH, $04
-                ldaa BRILLO
-                beq returnPH
-                suba #5
-                staa BRILLO
-                bra returnPH
-;       subrutina PH3
-;################################################################################################################################################
-;Descripcion:
+PTH2:
+        LDAA BRILLO        ; sumando 5 al brillo si no es 100
+        CMPA #100
+        BHS PTH2_final
+        ADDA #5
+        STAA BRILLO
+PTH2_final:
+        BSET PIFH,$04     ; Desactivando interrupcion
+        RTI
 
 
-;Paso de parametros:
-;Entrada:
-;Salida:
-;################################################################################################################################################
-PH3_ISR:        bset PIFH, $08
-                ldaa BRILLO
-                cmpa #100
-                beq returnPH
-                adda #5
-                staa BRILLO
-                bra returnPH
+PTH3:
+        TST BRILLO       ; restando 5 a brillo si no es 0
+        BLS PTH3_fin
+        LDAA BRILLO
+        SUBA #5
+        STAA BRILLO
+PTH3_fin:
+        BSET PIFH,$08     ; Desactivando interrupcion
+        RTI
 
 
 
@@ -550,7 +536,8 @@ PH3_ISR:        bset PIFH, $08
 ;*******************************************************************************
 ;Descripcion: Esta interrupcion realiza toda la logica para que funcionen los,
 ; 4 displa de 7 segmentos y los leds a la vez. Para informacion mas detallada
-; ver el enunciado de la tarea
+; ver el enunciado de la tarea. Ademas de que llama a PATRON_LEDS si la alarma
+; esta activada
 OC4_ISR:
         LDX #DISP1
         LDAA #100                 ;Verificando si el contador de tics ya
@@ -602,6 +589,7 @@ OC4_ISR_continuar2:
         BRA OC4_ISR_continuar3
 OC4_ISR_llamar:
         MOVW #0,CONT_7SEG
+        JSR PATRON_LEDS
         JSR BCD_7SEG
 OC4_ISR_continuar3:                    ; Decrementando contador de delay si no es 0
         TST CONT_DELAY
@@ -620,7 +608,8 @@ OC4_ISR_retornar:
 ;*******************************************************************************
 ;                                INTERRUPCION OC5_ISR
 ;*******************************************************************************
-;Descripcion:
+;Descripcion: Esta interrupcion hace toogle en la salida del OC5 con la finalidad
+; de generar un sonido de alarma.
 
 OC5_ISR:
         LDD TCNT                       ; Guardando en TC4 la siguiente interrupcion
@@ -635,7 +624,8 @@ OC5_ISR:
 ;*******************************************************************************
 ;                                INTERRUPCION IIC_ISR
 ;*******************************************************************************
-
+; DESCRIPCION: Esta interrupcion se encarga de atender los llamados de las
+; comunicaciones entre el RTC y el microprocesador.
 IIC_ISR:
 
         BRCLR BANDERAS,$01,IIC_ISR_WRITE_RTC
@@ -653,23 +643,30 @@ IIC_ISR_WRITE_RTC:
 ;*******************************************************************************
 ;                                SUBRUTINA WRITE_RTC
 ;*******************************************************************************
-                loc
-WRITE_RTC:      brset IBSR,$02,error_wrtc       ;No se recibe el ack
-                ldaa Index_RTC
-                bne next`
-                movb Dir_Seg,IBDR       ;Mandar la direccion de la primera palabra es decir segundos
-                bra return_wrtc
-next`           deca                    ;offset de -1 porque se toma en cuenta el envio de la direccion
-                ldx #T_WRITE_RTC
-                movb A,X,IBDR           ;Mandar el dato correspondiente segun el index
-                cmpa #5                 ;Es el ultimo dato?
-                bne return_wrtc
-                bclr IBCR,$20
-                ;Bset IBCR,#$40 ;TXAK <- 1
-return_wrtc:    inc Index_RTC
-                rts
-error_wrtc:     movb #$FF,LEDS                  ;Enciende todos los leds como alarma
-                bra return_wrtc
+; DESCRIPCION: Esta subrutina se encarga de escribir el contenido de T_Write_RTC
+; en el RTC mediante varios ciclos de interrupciones.
+WRITE_RTC:
+        TST INDEX_RTC
+        BEQ WRITE_RTC_primer_dato
+        LDAA INDEX_RTC  ;Despues de enviar el word adress
+        DECA    ; Por el primer ciclo en que se envia WORD_adress
+        LDX #T_Write_RTC
+        MOVB A,X,IBDR   ;Poniendo los datos para mandarlos al RTC
+        LDAA Index_RTC
+        CMPA #8
+        BEQ WRITE_RTC_ult_dato
+        INC INDEX_RTC
+        BRA WRITE_RTC_retornar
+WRITE_RTC_ult_dato:
+        CLR INDEX_RTC   ; Borrando index
+        BCLR IBCR,$20   ; MS/SL = 0, SE;AL DE STOP
+        BRA WRITE_RTC_retornar
+WRITE_RTC_primer_dato:
+        MOVB Dir_Seg,IBDR  ;Direccion de los segundos
+        INC INDEX_RTC
+WRITE_RTC_retornar:
+        BSET IBCR,$10   ; Transmitir
+        RTS
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
@@ -677,37 +674,64 @@ error_wrtc:     movb #$FF,LEDS                  ;Enciende todos los leds como al
 ;*******************************************************************************
 ;                                SUBRUTINA READ_RTC
 ;*******************************************************************************
-loc
-READ_RTC:       ldaa Index_RTC
-                bne next0`          ;Primera?
-                movb Dir_Seg,IBDR       ;Se envia la direccion a leer (Segundos)
-                bra return_rrtc
-next0`          cmpa #1             ;Segunda?
-                bne next1`
-                bset IBCR,$04       ;Repeate start
-                movb Dir_RD,IBDR
-                bra return_rrtc
-next1`          cmpa #2             ;Tercera?
-                bne next2`
-                bclr IBCR,$1C       ;Borra repeated start y pasa a modo rx y pone en 0 el ack por seguridad
-                ldab IBDR           ;Lectura dummy
-                bra return_rrtc
-next2`          cmpa #9             ;Ultimo lista?
-                bne next3`
-                bclr IBCR,$28       ;borra el no ack (8) y manda señal de stop (2)
-                bset IBCR,$10       ;pasa a modo tx
-                bra return_rrtc
-next3`          cmpa #8             ;Penultima?     FIXME: esto significa que no se lee el ultimo dato?
-                bne next4`
-                bset IBCR,$08       ;Pone un no ack
-next4`          deca
-                deca
-                deca                ;A -3 porque se consideran las primeras 3 interrupciones en el index
-                ldx #T_Read_RTC
-                movb IBDR,A,X       ;Se mueve el dato a la posicion deseada
+; DESCRIPCION: Esta subrutina se encarga de leer lo que manda el RTC en distintas
+; interrupciones y lo guarda en la variable T_Read_RTC
+READ_RTC:
+        LDAA Index_RTC
+        INC Index_RTC
+        CMPA #0
+        BEQ READ_RTC_primer_dato
+        CMPA #1
+        BEQ READ_RTC_segundo_dato
+        CMPA #2
+        BEQ READ_RTC_tercer_dato
+        CMPA #9
+        BEQ READ_RTC_ultimo_dato
+        CMPA #8
+        BNE READ_RTC_no_es_penultimo_dato
+        BSET IBCR,$08
+READ_RTC_no_es_penultimo_dato:
+        LDX #T_Read_RTC
+        DECA              ; Por el desfase de los anteriores 3 ciclos
+        DECA
+        DECA
+        MOVB IBDR,A,X    ; Guardando dato en donde debe ir
+        RTS
+READ_RTC_primer_dato:
+        MOVB DIR_SEG,IBDR         ;Envia la direccion de los segundos
+        RTS
+READ_RTC_segundo_dato:
+        BSET IBCR,$04             ; Reteated started
+        MOVB DIR_RD,IBDR          ; Envia direccion de lectura
+        RTS
+READ_RTC_tercer_dato:
+        BCLR IBCR,$0C             ; Borra repeated started y TXAK
+        BCLR IBCR,$10             ; Pone en modo recepcion
+        LDAB IBDR                 ; dummy para mandar ciclos al slave
+        RTS
+READ_RTC_ultimo_dato:
+        BCLR IBCR,$28             ; Pone senal stop y txak en 0
+        BSET IBCR,$10             ; Pone como transmisor para sig ciclo
+        CLR Index_RTC             ; Borra indice por si acaso
+        BRA READ_RTC_no_es_penultimo_dato ; Para mandarlo a guardar el dato
 
-return_rrtc     inc Index_RTC
-                rts
 
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
         
+        
+;*******************************************************************************
+;                                SUBRUTINA PATRON_LEDS
+;*******************************************************************************
+;DESCRIPCION: Se encarga de barrer los leds de izq a derecha si la alarma esta
+; activada
+PATRON_LEDS:
+        BRCLR BANDERAS,$10,PATRON_LEDS_TERMINAR
+        LDAA LEDS
+        BEQ PATRON_LEDS_RESET
+        LSR LEDS
+        RTS
+PATRON_LEDS_RESET:
+        BSET LEDS,$80
+PATRON_LEDS_TERMINAR:
+        RTS
+ ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
