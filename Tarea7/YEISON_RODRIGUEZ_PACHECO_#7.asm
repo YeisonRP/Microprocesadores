@@ -32,9 +32,9 @@ EOM:     EQU $FF
         
 CONT_RTI:       ds 1
 BANDERAS:       ds 1        ;COMANDO_DATO:X:X:ALARMA_LEDS:ALARMA:X:X:RTC_RW
-   		            ;ALARMA_LEDS en 1 enciende los leds,
-   			    ;ALARMA en 0 apaga la alarma, es controlado por ph0 y ph1
-   		            ;RTC_RW 1 escribe 0 lee el RTC
+                               ;ALARMA_LEDS en 1 enciende los leds,
+                               ;ALARMA en 0 apaga la alarma, es controlado por ph0 y ph1
+                               ;RTC_RW 1 escribe 0 lee el RTC
 BRILLO:         ds 1        ; Brillo de los leds, se sube de 5 en 5. Va de 0 a 100 es la
 CONT_DIG:       ds 1        ; Cuenta  El digito que se va a encenter
 CONT_TICKS:     ds 1        ; Cuenta tiks del Output compare, va de 0 a 100
@@ -62,11 +62,11 @@ Index_RTC:      ds 1
 Dir_WR:         db $D0
 Dir_RD:         db $D1
 Dir_Seg:        db $00
-ALARMA:         dW $0409 ; mm:hh MINUTOS Y HORAS
+ALARMA:         dW $0108 ; mm:hh MINUTOS Y HORAS
         ORG $1030
-T_Write_RTC:    db $30,$03,$09,$01,$05,$12 ; 0 segundos, 03 minutos, 09 h, dia 1, date = 04, mes 12 y a;o 19
+T_Write_RTC:    db $51,$00,$08,$01,$05,$12 ; 0 segundos, 03 minutos, 09 h, dia 1, date = 04, mes 12 y a;o 19
         ORG $1040
-T_Read_RTC:     ds 6
+T_Read_RTC:     ds 7
 
 ; MENSAJES
 Msj_reloj:    fcc "     RELOJ      "
@@ -74,7 +74,7 @@ Msj_reloj:    fcc "     RELOJ      "
 Msj_despertador:    fcc " DESPERTADOR 623"
         db EOM
 
-
+CONT_REB:       ds 1    ; Contador de rebotes para los botones
 #include registers.inc
 
 
@@ -158,6 +158,7 @@ Msj_despertador:    fcc " DESPERTADOR 623"
 ;INICIALIZACION DE VARIABLES:
         CLI                     ; Activando interrupciones
         CLR BANDERAS
+        ;*;
         CLR Index_RTC
         ; DISPLAYS
         CLR Index_RTC
@@ -167,12 +168,16 @@ Msj_despertador:    fcc " DESPERTADOR 623"
         CLR BCD1
         CLR BCD2
         CLR LEDS
+        CLR CONT_REB
         MOVW #0,CONT_7SEG
-
+        LDX #T_Read_RTC+1     ; Borrando parte importante del arreglo
+        MOVW #$0000,0,X
+        
         LDD TCNT        ; Inicializa TC4  , esto va mas abajo
         ADDD #60
         STD TC4
 
+        ;*;
         LDD TCNT                       ; Guardando en TC5 la siguiente interrupcion
         ADDD #10
         STD TC5
@@ -190,10 +195,14 @@ Main:
         LDX #T_Read_RTC+1
         LDD ALARMA
         CPD 0,X                ; Comparando la hora y minutos con alarma
-        BNE Main
-        BRCLR BANDERAS,$08,Main      ; Bit para que la alarma no vuelva a sonar
+        BNE esperar
+        BRCLR BANDERAS,$08,esperar      ; Bit para que la alarma no vuelva a sonar
         BSET TIOS,$20           ; Para encender sonido
         BSET BANDERAS,$10       ; Para encender leds
+esperar:
+        bset PIEH,$0F
+        LDAA #$FF
+Loop:   DBNE A,Loop
         bra Main
 
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
@@ -390,9 +399,13 @@ BCD_7SEG_CONT:
         DECA
         BRA BCD_7SEG_main_loop
 BCD_7SEG_FIN:                     ; Puntos de los segundos
-        BRCLR T_Read_RTC,$01,BCD_7SEG_FIN_real
+        BRCLR T_Read_RTC,$01,BCD_7SEG_FIN_msb_0
         BSET DISP2,$80
         BSET DISP3,$80
+        BRA BCD_7SEG_FIN_real
+BCD_7SEG_FIN_msb_0:
+        BCLR DISP2,$80
+        BCLR DISP3,$80
 BCD_7SEG_FIN_real:
         RTS
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
@@ -431,8 +444,13 @@ BCD_7SEG_FIN_real:
 
 RTI_ISR:
                 BSET CRGFLG,#$80
+                LDAA CONT_REB
+                BEQ RTI_ISR_CONTINUAR
+                DEC CONT_REB
+RTI_ISR_CONTINUAR:
+
                 LDAA CONT_RTI
-                CMPA #1
+                CMPA #1 ;CMPA #19
                 BEQ RTI_ISR_paso_1_segundo
                 INC CONT_RTI                ; Incrementando y retornando
                 RTI
@@ -470,19 +488,26 @@ RTI_ISR_paso_1_segundo:
 ; PTH2: Decrementa el brillo de los display de 7 segmentos
 ; PTH3: Incrementa el brillo de los display de 7 segmentos
 PHO_ISR:
+                LDAA CONT_REB
+                BEQ PHO_ISR_continuar
+                BSET PIFH,$0F
+                RTI
+PHO_ISR_continuar:
+                MOVB #1,CONT_REB        ; No entrar de nuevo a la int en un rato
                 BRSET PIFH,$01,PTHO
                 BRSET PIFH,$02,PTH1
                 BRSET PIFH,$04,PTH2
                 BRSET PIFH,$08,PTH3
+                BSET PIFH,$0F
 PTHO:
+        BSET PIFH,$01        ; Desactivando interrupcion
         Bset BANDERAS,$08    ; Activa la alarma
         BSET IBCR,%11010000  ; Activa modulo, interrupcion,pone a transmitir
-        MOVB #$1F,IBFD      ; Del calculo de la tabla
-        MOVB Dir_WR,IBDR    ; Direccion de escritura del RTC
-        BCLR BANDERAS,$01   ; RTC_RW = 0
+        MOVB #$1F,IBFD       ; Del calculo de la tabla
+        MOVB Dir_WR,IBDR     ; Direccion de escritura del RTC
+        BCLR BANDERAS,$01    ; RTC_RW = 0
         CLR Index_RTC
         BSET IBCR,%00100000  ; START
-        BSET PIFH,$01     ; Desactivando interrupcion
         RTI
 
 
@@ -627,7 +652,6 @@ OC5_ISR:
 ; DESCRIPCION: Esta interrupcion se encarga de atender los llamados de las
 ; comunicaciones entre el RTC y el microprocesador.
 IIC_ISR:
-
         BRCLR BANDERAS,$01,IIC_ISR_WRITE_RTC
         JSR READ_RTC
         BSET IBSR,$02  ;Borra bandera interrupcion
@@ -713,6 +737,7 @@ READ_RTC_ultimo_dato:
         BCLR IBCR,$28             ; Pone senal stop y txak en 0
         BSET IBCR,$10             ; Pone como transmisor para sig ciclo
         CLR Index_RTC             ; Borra indice por si acaso
+
         BRA READ_RTC_no_es_penultimo_dato ; Para mandarlo a guardar el dato
 
 

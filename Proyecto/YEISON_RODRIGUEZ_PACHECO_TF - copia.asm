@@ -201,84 +201,55 @@ Msj_medicion_su_vel_vel_lim_2:    fcc "SU VEL. VEL.LIM "
 
         ORG $2000
         LDS #$3BFF
-        
-;-_-_-_-_-_-_-_-_-_-_-_-_ INICIALIZACION DE HARDWARE: -_-_-_-_-_-_-_-_-_-_-_-_-_
-
-;____________________________________ ATD ______________________________________
-
+;INICIALIZACION DE HARDWARE:
+        ; Inicializacion de CAD
         movb #$82,ATD0CTL2      ; Activa el ATD y las interrupciones
+        ldaa #80
+ATD_wait:
+        dbne a,ATD_wait          ;Espera 10us
         movb #%00110000,ATD0CTL3      ; 6 conversiones por canal
         movb #%10110111,ATD0CTL4      ; Define frecuencia en 500KHz y 4 periodos del itempo de muestreo
-;_______________________________________________________________________________
-
-
-
-
-;_________________________ Puerto A para teclado _______________________________
-
+        movb #%10000111,ATD0CTL5      ; comienza lectura de ATD con los datos justificados y eligiendo la entrada 7 donde esta el pot
+        ;subrutina mux_teclado:
         MOVB #$01,PUCR       ;Resistencias pull up
         MOVB #$F0,DDRA      ;Puerto A, parte alta salidas, parte baja entradas
-;_______________________________________________________________________________
-
-
-
-
-;_____________________________________ RTI _____________________________________
-
+        
+        ;subrutina RTI_ISR:
         movb #$23,RTICTL        ; M = 2 n = 3
         bset CRGINT,#$80        ; activa rti
-;_______________________________________________________________________________
-
-
-
         
-;___________________________ OC4 y Timmer Overflow _____________________________
+        ;subrutina PHO_ISR:
+;        bset PIEH,$09           ; Activando interrupcion PH0,PH3
 
+        ;Inicializacion de Output compare canal 4 y Timmer overflow interrupt.
         BSET TSCR1,$80 ; TEN = 1 , Habilitando modulo timers
-        BSET TSCR2, $03 ; Preescalador = 8
+         BSET TSCR2, $03 ;BSET TSCR2, $83 Preescalador = 8
+
         BSET TIE,$10    ; Habilitando interrupcion output compare canal 4
         BSET TIOS,$10   ; Pone como salida canal 4
-;_______________________________________________________________________________
-
-
-
-
-
-;______________________ INICIALIZACION DE DISPLAY 7 SEG ________________________
-
-        MOVB #$FF,DDRB            ; Todas salidas puerto B (segentos de display)
-        MOVB #$0F,DDRP            ; 4 salidas puerto P (activan cada display)
-;_______________________________________________________________________________
-
-
-
 
         
-;______________________ INICIALIZACION DE J PARA LEDS __________________________
+        ; Inicializacion de Puerto B y P para uso de los display de 7 seg.
+        MOVB #$FF,DDRB            ; Todas salidas puerto B (segentos de display)
+        MOVB #$0F,DDRP            ; 4 salidas puerto P (activan cada display)
 
+        ;Inicializacion puerto J para usar leds
         bset DDRJ,$02             ; Salida puerto j
-;_______________________________________________________________________________
 
+        ; Inicializacion del relay
+;        BSET    DDRE,%00000100     ;PE2 salida para rele
 
-
-
-
-;__________________ INICIALIZACION DE K PARA PANTALLA LED ______________________
-
+        ; Pantalla LED
         MOVB #$FF,DDRK  ; Puerto K como salidas
-;_______________________________________________________________________________
-
-
-
-;-_-_-_-_-_-_-_-_-_-_-_-_ INICIALIZACION DE VARIABLES: -_-_-_-_-_-_-_-_-_-_-_-_-
-
-
-	CLI                     ; Activando interrupciones
+        
+;INICIALIZACION DE VARIABLES:
+        CLI                     ; Activando interrupciones
         MOVB #$FF,TECLA
         MOVB #$FF,TECLA_IN
         CLR CONT_REB
         CLR BANDERAS
         CLR CONT_TCL
+        ; DISPLAYS
         CLR V_LIM
         CLR VELOC
         CLR CONT_DIG
@@ -295,12 +266,8 @@ Msj_medicion_su_vel_vel_lim_2:    fcc "SU VEL. VEL.LIM "
         BSET MODO_ANTERIOR,$01   ; Para que siempre sea diferente a los demas modos
         
         jsr LCD         ; Inicializar LCD
-;_______________________________________________________________________________
-
-
-
-
-;-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_ Main -_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-
+        
+; MAIN!!!
 
 Main:
         LDAA MODO_ANTERIOR         ; Logica para saber si se cambio de modo
@@ -348,7 +315,7 @@ mod_medicion_actualizar_lcd:
 mod_medicion_no_actualizar_lcd:
         JSR MODO_MEDICION
         LBRA Main                ; Retorna al main
-;_______________________________________________________________________________
+;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
 
@@ -1230,7 +1197,8 @@ OC4_ISR_continuar4:
 OC4_ISR_llamar2:                       ; Cada 100ms se actualizan los datos de los display
         MOVW #0,CONT_200
         JSR PATRON_LEDS
-        MOVB #%10000111,ATD0CTL5
+        ;MOVB #%10000111,ATD0CTL5
+        
 OC4_ISR_retornar:
         LDD TCNT                       ; Guardando en TC4 la siguiente interrupcion
         ADDD #60
@@ -1254,7 +1222,6 @@ OC4_ISR_retornar:
 ; a ser mostrado en los display, este brillo es guardado en la variable BRILLO.
 
 ATD_ISR:
-        BSET ATD0STAT0,$80
         LDD ADR00H      ; Haciendo un promedio de los valores del CAD que esta
         ADDD ADR01H     ; leyendo el potenciometro
         ADDD ADR02H
@@ -1265,7 +1232,10 @@ ATD_ISR:
         LDX #6          ; Calculando promedio entre los 6 datos
         IDIV
         TFR x,d         ; Pasando resultado a D
-
+        
+        ;ADCB #0         ; Redondeando
+        ;ADCA #0
+        
         STAB POT
         
         LDAA #20        ; Calculando el valor de brillo
@@ -1280,7 +1250,7 @@ ATD_ISR:
         STAB BRILLO
 
 
-
+        MOVB #%10000111,ATD0CTL5
         RTI
 
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
