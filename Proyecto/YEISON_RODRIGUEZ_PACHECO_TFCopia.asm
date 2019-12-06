@@ -92,9 +92,6 @@ TICK_DIS:       ds 2
 
         ; 1011 ---- 101F
 VELOC:          ds 1
-VELOC2:          ds 1
-CONT_TICK_VEL_ANTES DS 1
-CONT_TICK_VEL_DESPUES DS 1
 TICK_VEL:       ds 1
 BIN1:           ds 1
 BIN2:           ds 1
@@ -171,15 +168,15 @@ Msj_medicion_su_vel_vel_lim_2:    fcc "SU VEL. VEL.LIM "
         ; Vector interrupcion output compare canal 4
         ORG $3e66
         dw OC4_ISR
-        
+
         ; Vector interrupcion del real time interrupt
         ORG $3e70
         dw RTI_ISR
-        
+
         ; Vector de interrupcion de key wakeups
         ORG $3e4c
         dw CALCULAR
-        
+
         ORG $3E52       ;ATD
         dw ATD_ISR
 
@@ -204,7 +201,7 @@ Msj_medicion_su_vel_vel_lim_2:    fcc "SU VEL. VEL.LIM "
 
         ORG $2000
         LDS #$3BFF
-        
+
 ;-_-_-_-_-_-_-_-_-_-_-_-_ INICIALIZACION DE HARDWARE: -_-_-_-_-_-_-_-_-_-_-_-_-_
 
 ;____________________________________ ATD ______________________________________
@@ -234,19 +231,13 @@ Msj_medicion_su_vel_vel_lim_2:    fcc "SU VEL. VEL.LIM "
 
 
 
-        
+
 ;___________________________ OC4 y Timmer Overflow _____________________________
 
         BSET TSCR1,$80 ; TEN = 1 , Habilitando modulo timers
-        BSET TSCR2, $83 ; Preescalador = 8
+        BSET TSCR2, $03 ; Preescalador = 8
         BSET TIE,$10    ; Habilitando interrupcion output compare canal 4
         BSET TIOS,$10   ; Pone como salida canal 4
-        BSET TSCR2,$80         ; Activando interrupcion TO
-
-
-                ldd TCNT
-                addd #60
-                std TC4
 ;_______________________________________________________________________________
 
 
@@ -262,7 +253,7 @@ Msj_medicion_su_vel_vel_lim_2:    fcc "SU VEL. VEL.LIM "
 
 
 
-        
+
 ;______________________ INICIALIZACION DE J PARA LEDS __________________________
 
         bset DDRJ,$02             ; Salida puerto j
@@ -282,7 +273,7 @@ Msj_medicion_su_vel_vel_lim_2:    fcc "SU VEL. VEL.LIM "
 ;-_-_-_-_-_-_-_-_-_-_-_-_ INICIALIZACION DE VARIABLES: -_-_-_-_-_-_-_-_-_-_-_-_-
 
 
-        CLI                     ; Activando interrupciones
+	CLI                     ; Activando interrupciones
         MOVB #$FF,TECLA
         MOVB #$FF,TECLA_IN
         CLR CONT_REB
@@ -302,7 +293,7 @@ Msj_medicion_su_vel_vel_lim_2:    fcc "SU VEL. VEL.LIM "
         STD TC4
 
         BSET MODO_ANTERIOR,$01   ; Para que siempre sea diferente a los demas modos
-        
+
         jsr LCD         ; Inicializar LCD
 ;_______________________________________________________________________________
 
@@ -312,13 +303,6 @@ Msj_medicion_su_vel_vel_lim_2:    fcc "SU VEL. VEL.LIM "
 ;-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_ Main -_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-
 
 Main:
-        MOVB #$80,TSCR1
-        MOVB #53,V_LIM
-        BSET PIEH,$09           ; Activando interrupcion PH0,PH3
-
-        JSR MODO_MEDICION
-        BRA Main
-
         LDAA MODO_ANTERIOR         ; Logica para saber si se cambio de modo
         CMPA PTIH
         BEQ continuar_main
@@ -333,7 +317,7 @@ continuar_main:
         BRCLR PTIH,$C0,mod_config ; Revisando por pulling si esta en modo CONF
         JSR LIBRE ; MODO LIBRE
         BRA Main                ; Retorna al main
-        
+
 mod_config:
         BRSET BANDERAS,$40,mod_config_actualizar_lcd
         BRA mod_config_no_actualizar_lcd
@@ -432,7 +416,7 @@ PANT_CTRL_vel_no_valida:   ; Si la velocidad no es valida, para imrpimir guiones
         MOVW #$0001,TICK_EN     ; Habilitando 2 segundos
         MOVW #$005B,TICK_DIS
         MOVB #$AA,VELOC     ; Para no volver a entrar aqui
-        
+
 PANT_CTRL_control_pantalla: ; Demas logica de la pantalla
         BRCLR BANDERAS,$08,PANT_CTRL_pant_encendida ; si pant_flh es 0 salta
         LDAA #$BB                   ; Verificando si ya se imprimio la pantalla 1 vez
@@ -446,7 +430,7 @@ PANT_CTRL_pant_vel_encendida: ; Se pone la vel lim y la velocidad
         MOVB V_LIM,BIN1       ; Cargando valores a displays
         MOVB VELOC,BIN2
         RTS
-        
+
 PANT_CTRL_pant_encendida:
         LDAA #$BB                   ; Verificando si ya se llego de PANT_FLH = 1
         CMPA BIN1
@@ -470,7 +454,7 @@ PANT_CTRL_retornar:
 
 
 ;*******************************************************************************
-;                             SUBRUTINA LIBRE
+;                             SUBRUTINA LCD
 ;*******************************************************************************
 ;Descripcion: Esta subrutina inicializa la subrutina LCD
 
@@ -599,7 +583,7 @@ CARGAR_LCD_first_loop_end:
         JSR SEND
         MOVB D60uS,CONT_DELAY
         JSR DELAY
-        
+
 CARGAR_LCD_SECOND_loop:
         LDAA 1,Y+
         CMPA #EOM
@@ -644,6 +628,8 @@ DELAY:
 ;*******************************************************************************
 ;Descripcion:
 
+
+;FALTA PROBAR
 
 MODO_CONFIG:
         BRSET BANDERAS,$04,MODO_CONFIG_tcl_lista ;Verificando si Ya hay una tecla lista
@@ -697,7 +683,7 @@ BCD_BIN_continuar:
         MOVB #$FF,0,X
         MOVB #$FF,1,-X
         RTS
-        
+
 
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
@@ -745,8 +731,6 @@ BIN_BCD2_fin:              ; RETORNANDO
         LSLA
         ROL BCD_L
         RTS
-;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
-
 
 ;*******************************************************************************
 ;                             SUBRUTINA CONV_BIN_BCD
@@ -975,7 +959,7 @@ FORMAR_ARRAY_lleno:
         CMPA TECLA_IN
         BEQ FORMAR_ARRAY_borrar_digito
         RTS
-        
+
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
@@ -1084,7 +1068,6 @@ PATRON_LEDS_reiniciar_patron:
 ; cada 1 ms aproximadamente, si CONT_REB es cero la subrutina no hace nada.
 
 RTI_ISR:        ; Teclado
-
                 BSET CRGFLG,#$80
                 TST CONT_REB      ; Si contador de rebotes es 0, no hace nada
                 BEQ FIN_RTI_ISR_cont_reb
@@ -1113,14 +1096,11 @@ FIN_RTI_ISR_cont_reb:                  ; Timer cuenta (modo run)
 
 ; PTH3:
 CALCULAR:
-                ;BSET PIFH,$09
-
                 BRSET PIFH,$01,PTH0
                 BRSET PIFH,$08,PTH3
-                RTI
-                
+
+
 PTH0:
-        BSET PIFH,$01     ; Desactivando interrupcion
         TST CONT_REB      ;Control de rebotes
         BNE PTH0_retornar
         LDAA #20          ; Para controlar rebotes
@@ -1132,14 +1112,12 @@ PTH0:
         IDIV              ; Calculo de la velocidad
         TFR X,D
         STAB VELOC         ;guardando velocidad
-        STAB VELOC2
-        MOVB TICK_VEL,CONT_TICK_VEL_DESPUES
         CLR TICK_VEL
 PTH0_retornar:
         BSET PIFH,$01     ; Desactivando interrupcion
         RTI
-                
-                
+
+
 PTH3:
         TST CONT_REB      ;Control de rebotes
         BNE PTH3_retornar
@@ -1149,17 +1127,16 @@ PTH3:
         LDX #Msj_medicion_1   ; Cargando LCD
         LDY #Msj_medicion_calculando_2
         BSET PIFH,$08     ; Desactivando interrupcion
-        ;CLI               ; activando interrupciones
-        ;JSR CARGAR_LCD
+        CLI               ; activando interrupciones
+        JSR CARGAR_LCD
 PTH3_retornar:
-        MOVB TICK_VEL,CONT_TICK_VEL_ANTES
         BSET PIFH,$08     ; Desactivando interrupcion
         RTI
-        
-        
 
-        
-        
+
+
+
+
 
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
@@ -1284,20 +1261,20 @@ ATD_ISR:
         ADDD ADR03H
         ADDD ADR04H
         ADDD ADR05H
-        
+
         LDX #6          ; Calculando promedio entre los 6 datos
         IDIV
         TFR x,d         ; Pasando resultado a D
 
         STAB POT
-        
+
         LDAA #20        ; Calculando el valor de brillo
         MUL             ; 20 * POT
-        
+
         LDX #255
         IDIV            ; (20 * POT) / 255
         TFR x,d         ; Pasando resultado a D
-        
+
         LDAA #5         ; Calculando resultado de brillo en escala de 0 a 100
         MUL             ;( (20 * POT) / 255 ) * 5
         STAB BRILLO
@@ -1325,8 +1302,6 @@ ATD_ISR:
 ;Descripcion:
 
 TCNT_ISR:
-
-        BSET TFLG2,$80  ; Borrando bandera interrupcion
         INC TICK_VEL
         LDD TICK_EN     ; Verificando si TICK_EN llego a 0, sino lo decrementa
         BEQ TCNT_ISR_set_pant_flag
@@ -1344,6 +1319,5 @@ TCNT_ISR_continuar:
 TCNT_ISR_clear_pant_flag:
         BCLR BANDERAS, $08      ; Pantflag = 0
 TCNT_ISR_retornar:
+        BSET TFLG2,$80  ; Borrando bandera interrupcion
         RTI
-
-;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
