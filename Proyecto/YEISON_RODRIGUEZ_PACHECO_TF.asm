@@ -714,9 +714,8 @@ INICIAR_ATD:
 
 Main:
         TST V_LIM               ; Verificando que la velocida sea valida
-        BEQ No_es_mod_med       ; Si no es asi, solo se puede estar en modo Libre o Config
+        BEQ mod_conf       ; Si no es asi, solo se puede estar en modo Libre o Config
         BRSET PTIH,$C0,mod_med  ; Salta a modo medicion
-No_es_mod_med:
         ; Este segmento inhabilita y borra todas los respectivos componentes que
         ; podrian causar problemas al venir del modo medicion.
         BCLR BANDERAS+1,$03     ; Desactiva habilitacion de botones ph3 y ph0
