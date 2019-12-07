@@ -61,24 +61,32 @@
 EOM:     EQU $FF
         ORG $1000
         ; 1000 ---- 100F
-; CAMBIAR ORDEN DE BANDERAS AL FINAL
-BANDERAS:       ds 2        ; Banderas del sistema
-; COMANDO_DATO : CAMBIO_MODO : CALC_TICKS : ALERTA : PANT_FLAG : ARRAY_OK : TCL_LEIDA : TCL_LISTA
+BANDERAS:       ds 2        ; Banderas del sistema:
+        ; 1000
+	; COMANDO_DATO : X : CALC_TICKS : ALERTA : PANT_FLAG : ARRAY_OK : TCL_LEIDA : TCL_LISTA
+        ; 1001
+	; X : X : X : MOD_LIB_ACTUAL : MOD_CONF_ACTUAL : MOD_MED_ACTUAL : PH3_EN : PH0_EN :
 
-; X : X : X : X : X : X : X : X :
+;___________________ DEFINICION DE QUE HACE CADA BANDERA _______________________
+;       MOD_MED_ACTUAL:
+;       MOD_CONF_ACTUAL:
+;       MOD_LIB_ACTUAL: Indica con un 1 si se debe actualizar el LCD de modo CONFIG
+; 	PH3_EN: Se usa para habilitar ph3, debe estar en 1 al inicio
+; 	PH0_EN: Se usa para habilitar PH0, debe estar en 0 al inicio
+; 	CALC_TICKS:
+; 	ALERTA: Bandera que esta en 1 cuando se debe poner el patron de LEDS de alerta
+; 	PANT_FLAG
+; 	ARRAY_OK: Bandera que esta en 1 cuando el array del teclado esta listo
+; 	TCL_LEIDA: Bandera que se pone en 1 cuando se lee una tecla del teclado
+; 	TCL_LISTA: Se pone en 1 cuando la tecla es soltada (esta lista)
+; 	COMANDO_DATO: Esta bandera es 0 si se envia un comando, 1 si se envian datos
+; 	CAMBIO_MODO: Se pone en 1 si hubo un cambio de modo
 
-
-; CALC_TICKS:
-; ALERTA: Bandera que esta en 1 cuando se debe poner el patron de LEDS de alerta
-; PANT_FLAG
-; ARRAY_OK: Bandera que esta en 1 cuando el array del teclado esta listo
-; TCL_LEIDA: Bandera que se pone en 1 cuando se lee una tecla del teclado
-; TCL_LISTA: Se pone en 1 cuando la tecla es soltada (esta lista)
-; COMANDO_DATO: Esta bandera es 0 si se envia un comando, 1 si se envian datos
-; CAMBIO_MODO: Se pone en 1 si hubo un cambio de modo
-
+        ; 1002
 V_LIM:          ds 1        ; Velocidad maxima a la que puede ir el auto
+        ; 1003
 MAX_TCL:        db $02      ;Cantidad de teclas que se van a leer  (longitud)
+        ; 1004
 TECLA:          ds 1        ;Tecla leida en un momento t0
 TECLA_IN:       ds 1        ;Tecla leida en un momento t1
 CONT_REB:       ds 1        ;Contador de rebotes que espera 10ms por la subrutina RTI_ISR
@@ -209,11 +217,12 @@ Msj_medicion_su_vel_vel_lim_2:    fcc "SU VEL. VEL.LIM "
 
 ;____________________________________ ATD ______________________________________
 
-        movb #$C2,ATD0CTL2      ; Activa el ATD y las interrupciones
-                LDAA #240
-INICIAR_ATD:       dbne A,INICIAR_ATD         ;loop de retardo para encender el convertidor
-        movb #%00110000,ATD0CTL3      ; 6 conversiones por canal
-        movb #%10110111,ATD0CTL4      ; Define frecuencia en 500KHz y 4 periodos del itempo de muestreo
+        MOVB #$C2,ATD0CTL2      ; Activa el ATD y las interrupciones
+        LDAA #240
+INICIAR_ATD:
+        dbne A,INICIAR_ATD            ;retardo convertidor
+        MOVB #%00110000,ATD0CTL3      ; 6 conversiones por canal
+        MOVB #%10110111,ATD0CTL4      ; Define frecuencia en 500KHz y 4 periodos del itempo de muestreo
 ;_______________________________________________________________________________
 
 
@@ -245,10 +254,9 @@ INICIAR_ATD:       dbne A,INICIAR_ATD         ;loop de retardo para encender el 
         BSET TIOS,$10   ; Pone como salida canal 4
         BSET TSCR2,$80         ; Activando interrupcion TO
 
-
-                ldd TCNT
-                addd #60
-                std TC4
+        LDD TCNT
+        ADDD #60
+        STD TC4
 ;_______________________________________________________________________________
 
 
@@ -289,6 +297,7 @@ INICIAR_ATD:       dbne A,INICIAR_ATD         ;loop de retardo para encender el 
         MOVB #$FF,TECLA_IN
         CLR CONT_REB
         CLR BANDERAS
+        BSET BANDERAS+1,$1E  ; Activando: MOD_MED_ACTUAL,MOD_CONFIG_ACTUAL,MOD_LIB_ACTUAL,PH3_EN.
         CLR CONT_TCL
         CLR V_LIM
         CLR VELOC
@@ -307,59 +316,58 @@ INICIAR_ATD:       dbne A,INICIAR_ATD         ;loop de retardo para encender el 
 ;_______________________________________________________________________________
 
 
-
+         ; 1001
+	; X : X : X : MOD_LIB_ACTUAL : MOD_CONF_ACTUAL : MOD_MED_ACTUAL : PH3_EN : PH0_EN :
 
 ;-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_ Main -_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-
 
-	bset TSCR2,$80
-	BSET PIEH,$09           ; Activando interrupcion PH0,PH3
+        bset TSCR2,$80
+        BSET PIEH,$09           ; Activando interrupcion PH0,PH3
 Main:
-        MOVB #53,V_LIM
-        JSR MODO_MEDICION
-        BRA Main
+        TST V_LIM               ; Verificando que la velocida sea valida
+        BEQ No_es_mod_med       ; Si no es asi, solo se puede estar en modo Libre o Config
+        BRSET PTIH,$C0,mod_med  ; Salta a modo medicion
+No_es_mod_med:
+        BRCLR PTIH,$C0,mod_conf ; Verificando si es modo config
+        JSR LIBRE
+        LBRA Main               ; Vuelve al main
 
-;        BSET BANDERAS,$40
-;continuar_main:
-  ;      MOVB PTIH,MODO_ANTERIOR
+mod_conf:
+        BRCLR BANDERAS+1,$08,mod_conf_no_act_LCD
+        BSET BANDERAS+1,$14      ; Arreglando banderas de cambios de modo
+        BCLR BANDERAS+1,$08
 
- ;       BRSET PTIH,$C0,mod_medicion ; Revisando por pulling si esta en modo Med
- ;       clr VELOC
- ;       BCLR PIEH,$09           ; Desactivando interrupcion PH0,PH3
- ;       BCLR TSCR2,$80         ; Desactivando interrupcion TO
- ;       BRCLR PTIH,$C0,mod_config ; Revisando por pulling si esta en modo CONF
- ;       JSR LIBRE ; MODO LIBRE
-;;        BRA Main                ; Retorna al main
+        LDX #Msj_config_1      ; Cargando LCD con mensaje de modo configuracion
+        LDY #Msj_config_2
+        JSR CARGAR_LCD
         
-;mod_config:
- ;       BRSET BANDERAS,$40,mod_config_actualizar_lcd
- ;       BRA mod_config_no_actualizar_lcd
-;mod_config_actualizar_lcd:
-  ;      LDX #Msj_config_1       ; Cargando LCD
-  ;      LDY #Msj_config_2
-  ;      JSR CARGAR_LCD
-        ;MOVB #$BB,BIN2          ; Cargando 0s en displays de la izq
- ;       BSET LEDS,$01           ; Encendiendo el led correspondiente
- ;       BCLR LEDS,$06
- ;       BCLR BANDERAS,$40       ; Borrando bandera cambio modo
-;mod_config_no_actualizar_lcd:
-;        JSR MODO_CONFIG
-;        BRA Main                ; Retorna al main
+        MOVB #$01,LEDS          ; Arreglando los LEDS de modo
+        
+        BCLR TSCR2,$80          ; Desactivando interrupciones TO y Key Wake Ups
+        BCLR PIEH,$09
+        
+mod_conf_no_act_LCD:
+        JSR MODO_CONFIG
+        LBRA Main               ; Vuelve al main
+        
+mod_med:
+        BRCLR BANDERAS+1,$04,mod_med_no_act_LCD
+        BSET BANDERAS+1,$18      ; Arreglando banderas de cambios de modo
+        BCLR BANDERAS+1,$04
+        
+        LDX #Msj_medicion_1      ; Cargando LCD con mensaje de modo medicion
+        LDY #Msj_medicion_esperando_2
+        JSR CARGAR_LCD
+        
+        MOVB #$02,LEDS          ; Arreglando los LEDS de modo
+        
+        bset TSCR2,$80          ; Activando interrupciones
+        BSET PIEH,$09
+        
+mod_med_no_act_LCD:
+        JSR MODO_MEDICION
+        LBRA Main               ; Vuelve al main
 
-;mod_medicion:
-;        BRSET BANDERAS,$40,mod_medicion_actualizar_lcd
-;        BRA mod_medicion_no_actualizar_lcd
-;mod_medicion_actualizar_lcd:
-;        LDX #Msj_medicion_1       ; Cargando LCD
-;        LDY #Msj_medicion_esperando_2
-;        JSR CARGAR_LCD
-;        BCLR BANDERAS,$40       ;CAMBIO MODO NO SE OCUPA AQUI
-;        BSET LEDS,$02           ; Encendiendo el led correspondiente
-;        BCLR LEDS,$05
-;        BSET PIEH,$09           ; Activando interrupcion PH0,PH3
-;        BSET TSCR2, $80         ; Activando interrupcion TO
-;mod_medicion_no_actualizar_lcd:
-;        JSR MODO_MEDICION
-;        LBRA Main                ; Retorna al main
 ;_______________________________________________________________________________
 
 
@@ -464,6 +472,7 @@ PANT_CTRL_ultimo_ciclo:
         CLR VELOC
         BSET PIEH,$09           ; Activando interrupcion PH0,PH3
         BCLR BANDERAS,$30       ; CALC_TICKS = 0 y ALERTA = 0
+        BSET BANDERAS+1,$02     ; Bandera que habilita ph3
 PANT_CTRL_retornar:
         RTS
 
@@ -477,17 +486,25 @@ PANT_CTRL_retornar:
 ;Descripcion: Esta subrutina inicializa la subrutina LCD
 
 LIBRE:
-        BRSET BANDERAS,$40,mod_libre_actualizar_lcd
+        BRSET BANDERAS+1,$10,mod_libre_actualizar_lcd
         RTS
 mod_libre_actualizar_lcd:
-        BSET LEDS,$04           ; Encendiendo el led correspondiente de modo libre
-        BCLR LEDS,$03
+        
+        BSET BANDERAS+1,$0C     ; Cargando banderas correspondientes de camb modo
+        BCLR BANDERAS+1,$10     ; Borrando bandera de este modo
+        
         LDX #Msj_libre_1       ; Cargando LCD
         LDY #Msj_libre_2
         JSR CARGAR_LCD
-        MOVB #$BB,BIN1
-        MOVB #$BB,BIN2          ; Cargando 0s en displays de la izq
-        BCLR BANDERAS,$40       ; Borrando bandera cambio modo
+
+        MOVB #$04,LEDS          ; Cargando el led correspondiente
+        
+        BCLR TSCR2,$80          ; Desactivando interrupciones TO y Key Wake Ups
+        BCLR PIEH,$09
+        
+        MOVB #$BB,BIN1          ; Cargando 0s en displays
+        MOVB #$BB,BIN2
+        
         RTS
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
@@ -1123,14 +1140,12 @@ CALCULAR:
                 RTI
 
 PTH0:
-        BRCLR BANDERAS+1,$01,PTH0_retornar
-        BSET PIFH,$01     ; Desactivando interrupcion
-
+        BRCLR BANDERAS+1,$01,PTH0_retornar ; Para saber si realmente se presiono antes PTH3
+        BCLR BANDERAS+1,$01
         TST CONT_REB      ;Control de rebotes
         BNE PTH0_retornar
         LDAA #20          ; Para controlar rebotes
         STAA CONT_REB
-        BCLR BANDERAS+1,$01
         LDAB TICK_VEL      ; DIVISOR
         CLRA
         TFR D,X
@@ -1142,19 +1157,20 @@ PTH0:
         MOVB TICK_VEL,CONT_TICK_VEL_DESPUES
         CLR TICK_VEL
 PTH0_retornar:
-        BSET PIFH,$01     ; Desactivando interrupcion
-        BSET PIEH,$08     ; ACTIVA INTERRUPCION NUEVAMENTE
-        BCLR PIEH,$01     ; DESC INTERRUPCION NUEVAMENTE
+        BSET PIFH,$01     ; Desactivando bandera de interrupcion
         RTI
 
 
 PTH3:
+
         TST CONT_REB      ;Control de rebotes
         BNE PTH3_retornar
+        BRCLR BANDERAS+1,$02,PTH3_retornar
+        BSET BANDERAS+1,$01
+        BCLR BANDERAS+1,$02
         LDAA #20          ; Para controlar rebotes
         STAA CONT_REB
         CLR TICK_VEL
-        BSET BANDERAS+1,$01
         LDX #Msj_medicion_1   ; Cargando LCD
         LDY #Msj_medicion_calculando_2
         BSET PIFH,$08     ; Desactivando interrupcion
@@ -1163,8 +1179,6 @@ PTH3:
 PTH3_retornar:
         MOVB TICK_VEL,CONT_TICK_VEL_ANTES
         BSET PIFH,$08     ; Desactivando interrupcion
-        BCLR PIEH,$08     ; ACTIVA INTERRUPCION NUEVAMENTE
-        BSET PIEH,$01     ; ACTIVA INTERRUPCION NUEVAMENTE
         RTI
         
         
