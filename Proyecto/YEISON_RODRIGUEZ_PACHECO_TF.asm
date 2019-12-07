@@ -55,117 +55,490 @@
 ;* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 
 
+
+
+
+
+
+
+
+
+
+;*******************************************************************************
+;                        DECLARACION DE ETIQUETAS                              *
+;*******************************************************************************
+
+
+;-------------------------------------------------------------------------------
+EOM:     EQU $FF
+
+; Descripcion: Es utilizado como simbolo de fin de mensaje para todos los mensa-
+; jes enviados a la pantalla LCD.
+;_______________________________________________________________________________
+
+
+;-------------------------------------------------------------------------------
+#include registers.inc
+;_______________________________________________________________________________
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ;*******************************************************************************
 ;                        DECLARACION ESTRUCTURAS DE DATOS                      *
 ;*******************************************************************************
-EOM:     EQU $FF
-        ORG $1000
-        ; 1000 ---- 100F
+
+
+	ORG $1000
+;-------------------------------- $1000 a $1001 --------------------------------
 BANDERAS:       ds 2        ; Banderas del sistema:
-        ; 1000
-	; COMANDO_DATO : X : CALC_TICKS : ALERTA : PANT_FLAG : ARRAY_OK : TCL_LEIDA : TCL_LISTA
-        ; 1001
-	; X : X : X : MOD_LIB_ACTUAL : MOD_CONF_ACTUAL : MOD_MED_ACTUAL : PH3_EN : PH0_EN :
 
-;___________________ DEFINICION DE QUE HACE CADA BANDERA _______________________
-;       MOD_MED_ACTUAL:
-;       MOD_CONF_ACTUAL:
-;       MOD_LIB_ACTUAL: Indica con un 1 si se debe actualizar el LCD de modo CONFIG
-; 	PH3_EN: Se usa para habilitar ph3, debe estar en 1 al inicio
-; 	PH0_EN: Se usa para habilitar PH0, debe estar en 0 al inicio
-; 	CALC_TICKS:
-; 	ALERTA: Bandera que esta en 1 cuando se debe poner el patron de LEDS de alerta
-; 	PANT_FLAG
-; 	ARRAY_OK: Bandera que esta en 1 cuando el array del teclado esta listo
-; 	TCL_LEIDA: Bandera que se pone en 1 cuando se lee una tecla del teclado
-; 	TCL_LISTA: Se pone en 1 cuando la tecla es soltada (esta lista)
-; 	COMANDO_DATO: Esta bandera es 0 si se envia un comando, 1 si se envian datos
-; 	CAMBIO_MODO: Se pone en 1 si hubo un cambio de modo
+; Descripcion: Se almacena en un WORD todas las banderas del sistema, veremos
+; que la distribucion es de la siguiente forma:
 
-        ; 1002
-V_LIM:          ds 1        ; Velocidad maxima a la que puede ir el auto
-        ; 1003
-MAX_TCL:        db $02      ;Cantidad de teclas que se van a leer  (longitud)
-        ; 1004
-TECLA:          ds 1        ;Tecla leida en un momento t0
-TECLA_IN:       ds 1        ;Tecla leida en un momento t1
-CONT_REB:       ds 1        ;Contador de rebotes que espera 10ms por la subrutina RTI_ISR
+; --------- $1000 ----------
+; X : X : X : MOD_LIB_ACTUAL : MOD_CONF_ACTUAL : MOD_MED_ACTUAL : PH3_EN : PH0_EN
+
+; Ahora se muestra la definicion de la funcionalidad de estas banderas:
+;  MOD_MED_ACTUAL: Indica con un 1 si se debe actualizar el LCD de modo MEDICION
+;  MOD_CONF_ACTUAL: Indica con un 1 si se debe actualizar el LCD de modo CONFIG
+;  MOD_LIB_ACTUAL: Indica con un 1 si se debe actualizar el LCD de modo LIBRE
+;  PH3_EN: Se usa para habilitar ph3, debe estar en 1 al inicio
+;  PH0_EN: Se usa para habilitar PH0, debe estar en 0 al inicio
+
+
+; --------- $1001 ----------
+; COMANDO_DATO : X : CALC_TICKS : ALERTA : PANT_FLAG : ARRAY_OK : TCL_LEIDA : TCL_LISTA
+
+; Ahora se muestra la definicion de la funcionalidad de estas banderas:
+;   CALC_TICKS: Se utiliza en la subrutina PANT_CTRL
+;   ALERTA: Bandera que esta en 1 cuando se debe poner el patron de LEDS de alerta
+;   PANT_FLAG: Se utiliza en la subrutina PANT_CTRL para saber cuando desplegar en pant
+;   ARRAY_OK: Bandera que esta en 1 cuando el array del teclado esta listo
+;   TCL_LEIDA: Bandera que se pone en 1 cuando se lee una tecla del teclado
+;   TCL_LISTA: Se pone en 1 cuando la tecla es soltada (esta lista)
+;   COMANDO_DATO: Esta bandera es 0 si se envia un comando, 1 si se envian datos
+
+;_______________________________________________________________________________
+
+;------------------------------------ $1002 ------------------------------------
+V_LIM:          ds 1
+
+; Descripcion: Variable tipo byte que almacena la velocidad limite del vehicu-
+; lo.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1003 ------------------------------------
+MAX_TCL:        db $02
+
+; Descripcion: Indica la cantidad maxima de teclas a ser ingresadas en el tecla-
+; do.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1004 ------------------------------------
+TECLA:          ds 1
+
+; Descripcion: Es utilizada para almacenar una tecla justo cuando se presiona
+; un boton del teclado.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1005 ------------------------------------
+TECLA_IN:       ds 1
+
+; Descripcion: Es utilizada para comparar con TECLA y ver si la tecla presionada
+; era valida
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1006 ------------------------------------
+CONT_REB:       ds 1
+
+; Descripcion: Es utilizada para controlar rebotes de botones. Es decrementado
+; por la interrupcion RTI
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1007 ------------------------------------
 CONT_TCL:       ds 1        ;Contador de teclas que han sido escritas, usada en FORMAR_ARRAY
-PATRON:         ds 1        ;Contador que va hasta 5, usado por MUX_TECLADO
+
+; Descripcion: Es utilizada para contar la cantidad de teclas ya guardadas del
+; teclado.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1008 ------------------------------------
+PATRON:         ds 1
+
+; Descripcion: Utilizada para contar hasta 5 en MUX_TECLADO, con el fin de tener
+; una correcta obtencion de la tecla presionada en el teclado.
+;_______________________________________________________________________________
+
+
+;-------------------------------- $1009 a 100A ---------------------------------
 NUM_ARRAY:      db $ff,$ff             ;Guarda los numeros ingresados en el teclado
+
+; Descripcion: Tabla de tamano WORD usada para almacenar las teclas presionadas
+; en el teclado matricial.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $100B ------------------------------------
 BRILLO:         ds 1        ; Brillo de los leds, se sube de 5 en 5. Va de 0 a 100 es la variable K
+
+; Descripcion: Utilizada para controlar el brillo de los LEDS y los display de
+; 7 segmentos. Va de 0 a 100. Es modificada por el ATD
+;_______________________________________________________________________________
+
+
+;------------------------------------ $100C ------------------------------------
 POT:            ds 1        ; Es el valor leido en el potenciometro.
+
+; Descripcion: Esta variable almacena el valor leido en el potenciometro.
+;_______________________________________________________________________________
+
+
+;-------------------------------- $100D a $100E --------------------------------
 TICK_EN:        ds 2
+
+; Descripcion: Esta variable tipo WORD almacena una cantidad de TICKS calculados
+; por el programador. Cuando estos ticks llegan a 0 (TCNT los decrementa) se pone
+; la bandera PANT_FLAG en 1, con lo cual se enciende la pantalla de 7 segmentos.
+; Solo es valida en modo medicion.
+;_______________________________________________________________________________
+
+
+;-------------------------------- $100F a $1010 --------------------------------
 TICK_DIS:       ds 2
 
-        ; 1011 ---- 101F
-VELOC:          ds 1
-TICK_VEL:       ds 1
-BIN1:           ds 1
-BIN2:           ds 1
-BCD1:           ds 1        ; Digitos en BCD, los guarda la subrutina BIN_BCD
-BCD2:           ds 1
-BCD_L:          ds 1
-BCD_H:          ds 1
-DISP1:          ds 1        ; Los 4 valores de los display que se escriben en PORTB
-DISP2:          ds 1
-DISP3:          ds 1
-DISP4:          ds 1
-LEDS:           ds 1        ; LEDS a ser encendidos
-CONT_DIG:       ds 1        ; Cuenta  El digito que se va a encenter
-CONT_TICKS:     ds 1        ; Cuenta tiks del Output compare, va de 0 a 100
+; Descripcion: Esta variable tipo WORD almacena una cantidad de TICKS calculados
+; por el programador. Cuando estos ticks llegan a 0 (TCNT los decrementa) se pone
+; la bandera PANT_FLAG en 0, con lo cual se apaga  la pantalla de 7 segmentos.
+; Solo es valida en modo medicion.
+;_______________________________________________________________________________
 
-        ; 1020 ---- 102B
-DT:             ds 1        ; DT = N - K duty cicle
-CONT_7SEG:      ds 2        ; Para hacer que cada 10hz se llame a BCD_7SEG
-CONT_200:       ds 2        ; Para hacer que cada 10hz se llame a BCD_7SEG
+
+;------------------------------------ $1011 ------------------------------------
+VELOC:          ds 1
+
+; Descripcion: Esta variable almacena la velocidad en KM/H a la que va el vehi-
+; culo
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1012 ------------------------------------
+TICK_VEL:       ds 1
+
+; Descripcion: Esta variable es utilizada para contar ticks cada vez que llega
+; la interrupcion TCNT. Con estos ticks se calcula la velocidad en KM/H
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1013 ------------------------------------
+BIN1:           ds 1
+
+; Descripcion: Variable que almacena un valor en binario con el fin de que se
+; despliegue en la pantalla de 7 segmentos.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1014 ------------------------------------
+BIN2:           ds 1
+
+; Descripcion: Variable que almacena un valor en binario con el fin de que se
+; despliegue en la pantalla de 7 segmentos.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1015 ------------------------------------
+BCD1:           ds 1
+
+; Descripcion: Almacena en los primeros 4 bits un numero en BCD, de igual forma
+; en los ultimos 4 bits. Estos valores seran desplegados en la pantalla de 7 seg
+; No se debe utilizar esta variable para mandar datos a los display, debe utili-
+; zarse BIN1 o BIN2
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1016 ------------------------------------
+BCD2:           ds 1
+
+; Descripcion: Almacena en los primeros 4 bits un numero en BCD, de igual forma
+; en los ultimos 4 bits. Estos valores seran desplegados en la pantalla de 7 seg
+; No se debe utilizar esta variable para mandar datos a los display, debe utili-
+; zarse BIN1 o BIN2
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1017 ------------------------------------
+BCD_L:          ds 1
+
+; Descripcion: Utilizada para calcular numeros de binario a BCD.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1018 ------------------------------------
+BCD_H:          ds 1
+
+; Descripcion: Utilizada para calcular numeros de binario a BCD.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1019 ------------------------------------
+DISP1:          ds 1        ; Los 4 valores de los display que se escriben en PORTB
+
+; Descripcion: Contiene la codificacion de 7 segmentos de un numero que sera
+; desplegado en los disply de 7 segmentos.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $101A ------------------------------------
+DISP2:          ds 1
+
+; Descripcion: Contiene la codificacion de 7 segmentos de un numero que sera
+; desplegado en los disply de 7 segmentos.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $101B ------------------------------------
+DISP3:          ds 1
+
+; Descripcion: Contiene la codificacion de 7 segmentos de un numero que sera
+; desplegado en los disply de 7 segmentos.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $101C ------------------------------------
+DISP4:          ds 1
+
+; Descripcion: Contiene la codificacion de 7 segmentos de un numero que sera
+; desplegado en los disply de 7 segmentos.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $101D ------------------------------------
+LEDS:           ds 1
+
+; Descripcion: Esta variable controla cuales LEDS estan encendidos y cuales no.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $101E ------------------------------------
+CONT_DIG:       ds 1
+
+; Descripcion: Esta variable es utilizada por la interrupcion OC4 con el fin de
+; controlar cual de los display se va a encender, debido a que se encienden por
+; multiplexacion de pantalla.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $101F ------------------------------------
+CONT_TICKS:     ds 1
+
+; Descripcion: Cuenta ticks en la subrutina output compare, con el fin de contro
+; lar el ciclo de trabajo de cada una de los display de 7 segmentos, y asi bajar
+; les o subirles el brillo segun corresponda.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1020 ------------------------------------
+DT:             ds 1
+
+; Descripcion: Es utilizada para calcular el ciclo de trabajo en la interrupcion
+; OC4, con el fin de controlar el tiempo de encendido de los display de 7 seg.
+;_______________________________________________________________________________
+
+
+;-------------------------------- $1021 a $1022 --------------------------------
+CONT_7SEG:      ds 2
+
+; Descripcion: Contador controlado por OC4 con el fin de que cada 1/10 s se
+; llame a BCD_7SEG para que actualice los valores de la pantalla de 7 seg.
+;_______________________________________________________________________________
+
+
+;-------------------------------- $1023 a $1024 --------------------------------
+CONT_200:       ds 2
+
+; Descripcion: Contador controlado por la interrupcion OC4 con el fin de que
+; cada 1/5 s se escriba el registro ATD0CTRL5 para iniciar un ciclo de conver-
+; sion del ATD. Tambien para llamar a Patron Leds
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1025 ------------------------------------
 CONT_DELAY:     ds 1
+
+; Descripcion: Variable utilizada para que se decremente en la subrutina OC4, con
+; el fin de que se pueda contar delay de tiempos para controlar la pantalla LCD.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1026 ------------------------------------
 D2mS:           dB 100
+
+; Descripcion: Utilizado para generar un delay de 2 mili segundos.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1027 ------------------------------------
 D260uS:         dB 13
+
+; Descripcion: Utilizado para generar un delay de 260 u segundos.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1028 ------------------------------------
 D60uS:          dB 3
+
+; Descripcion: Utilizado para generar un delay de 60 u segundos.
+;_______________________________________________________________________________
+
+
+;------------------------------------ $1029 ------------------------------------
 CLEAR_LCD:      ds 1
+
+; Descripcion: Utilizada para el control de la pantalla LCD
+;_______________________________________________________________________________
+
+
+;------------------------------------ $102A ------------------------------------
 ADD_L1:         dB $80
+
+; Descripcion: Utilizada para el control de la pantalla LCD
+;_______________________________________________________________________________
+
+
+;------------------------------------ $102B ------------------------------------
 ADD_L2:         dB $C0
 
-        ; 102C ---- 102F por definir:
+; Descripcion: Utilizada para el control de la pantalla LCD
+;_______________________________________________________________________________
 
-; xx
-; xx
-; xx
 
-;BANDERAS:       ds 1        ;COMANDO_DATO:ALERTA:X:MODSEL:CAMBIO_MODO:ARRAY_OK:TLC_LEIDA:TCL_LISTA
-                            ; CAMBIO_MODO es para que la pantalla LCD solo se refresque una vez entre cada cambio de modo
-                            ; MODSEL. 1 es para modo CPROG, 0 MODO RUN
-                            ; COMANDO_DATO: Esta bandera es 0 si se envia un comando, 1 si se envian datos
-
+;-------------------------------- $1030 a $103B --------------------------------
         ORG $1030
-TECLAS:         db $01,$02,$03,$04,$05,$06,$07,$08,$09,$0B,$0,$0E ;Tabla de teclas del teclado
+TECLAS:         db $01,$02,$03,$04,$05,$06,$07,$08,$09,$0B,$0,$0E
 
+; Descripcion: Tabla que contiene los valores de las teclas presionadas en el
+; teclado matricial
+;_______________________________________________________________________________
+
+
+;-------------------------------- $1040 a $104B --------------------------------
         ORG $1040
 SEGMENT:       dB $3f,$06,$5b,$4f,$66,$6d,$7d,$07,$7f,$6f,$40,$00
 
+; Descripcion: Tabla que contiene las traducciones de BCD a 7 segmentos de los
+; numeros del 0 al 9. Ademas de que el numero A de la tabla es utilizado para
+; encender dos guiones y el numero B para apagar los display.
+;_______________________________________________________________________________
+
+
+;-------------------------------- $1050 a $1055 --------------------------------
         ORG $1050
 iniDsp:         db $04,$28,$28,$06,%00001100 ;disp on, cursor off, no blinkin
                 db EOM
+
+; Descripcion: Tabla de comandos utilizados para inicializar la pantalla LCD.
+;_______________________________________________________________________________
+
+
+;-------------------------------- $1060 a $1071 --------------------------------
         ORG $1060
 Msj_config_1:    fcc "  MODO CONFIG.  "
         db EOM
+        
+; Descripcion: Mensaje utilizado en el modo configuracion, es desplegado en el
+; LCD
+;_______________________________________________________________________________
+
+
+;-------------------------------- $1072 a $1083 --------------------------------
 Msj_config_2:    fcc " VELOC. LIMITE  "
         db EOM
+        
+; Descripcion: Mensaje utilizado en el modo Config para indicar la velocidad
+; Limite a la que puede ir un auto.
+;_______________________________________________________________________________
+
+
+;-------------------------------- $1084 a $1095 --------------------------------
 Msj_libre_1:    fcc "  RADAR   623   "
         db EOM
+        
+; Descripcion: Mensaje utilizado en el modo Libre que indica el nombre del pro-
+; ducto.
+;_______________________________________________________________________________
+
+
+;-------------------------------- $1096 a $10A7 --------------------------------
 Msj_libre_2:    fcc "  MODO LIBRE    "
         db EOM
+        
+; Descripcion: Mensaje utilizado en el modo Libre que indica que se esta en el
+; modo libre.
+;_______________________________________________________________________________
+
+
+;-------------------------------- $10A8 a $10B9 --------------------------------
 Msj_medicion_1:    fcc " MODO MEDICION  "
         db EOM
+        
+; Descripcion: Mensaje utilizado en el modo Medicion que indica el modo.
+;_______________________________________________________________________________
+
+
+;-------------------------------- $10BA a $10CB --------------------------------
 Msj_medicion_calculando_2:    fcc "  CALCULANDO... "
         db EOM
+        
+; Descripcion: Mensaje utilizado cuando se esta calculando la velocidad.
+;_______________________________________________________________________________
+
+
+;-------------------------------- $10CC a $10DD --------------------------------
 Msj_medicion_esperando_2:    fcc "  ESPERANDO...  "
         db EOM
+        
+; Descripcion: Mensaje utilizado cuando se esta esperando a que pase un auto.
+;_______________________________________________________________________________
+
+
+;-------------------------------- $10DE a $10EF --------------------------------
 Msj_medicion_su_vel_vel_lim_2:    fcc "SU VEL. VEL.LIM "
         db EOM
+        
+; Descripcion: Mensaje utilizado para mostrarle al auto la velocidad a la que
+; va y la velocidad limite.
+;_______________________________________________________________________________
 
-#include registers.inc
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -173,24 +546,31 @@ Msj_medicion_su_vel_vel_lim_2:    fcc "SU VEL. VEL.LIM "
 ;*******************************************************************************
 ;                       DECLARACION VECTORES INTERRUPCION
 ;*******************************************************************************
-        ; Vector interrupcion output compare canal 4
+        ; Vector interrupcion relocalizado del output compare canal 4
         ORG $3e66
         dw OC4_ISR
 
-        ; Vector interrupcion del real time interrupt
+        ; Vector interrupcion relocalizado del real time interrupt
         ORG $3e70
         dw RTI_ISR
 
-        ; Vector de interrupcion de key wakeups
+        ; Vector de interrupcion relocalizado de key wakeups
         ORG $3e4c
         dw CALCULAR
 
-        ORG $3E52       ;ATD
+        ; Vector de interrupcion relocalizado ATD
+        ORG $3E52
         dw ATD_ISR
 
-        ORG $3E5E       ;Timmer Overflow
+        ; Vector de interrupcion relozalizado del Timmer Overflow
+        ORG $3E5E
         dw TCNT_ISR
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
+
+
+
+
 
 
 
@@ -212,6 +592,7 @@ Msj_medicion_su_vel_vel_lim_2:    fcc "SU VEL. VEL.LIM "
 
 ;-_-_-_-_-_-_-_-_-_-_-_-_ INICIALIZACION DE HARDWARE: -_-_-_-_-_-_-_-_-_-_-_-_-_
 
+
 ;____________________________________ ATD ______________________________________
 
         MOVB #$C2,ATD0CTL2      ; Activa el ATD y las interrupciones
@@ -223,8 +604,6 @@ INICIAR_ATD:
 ;_______________________________________________________________________________
 
 
-
-
 ;_________________________ Puerto A para teclado _______________________________
 
         MOVB #$01,PUCR       ;Resistencias pull up
@@ -232,15 +611,11 @@ INICIAR_ATD:
 ;_______________________________________________________________________________
 
 
-
-
 ;_____________________________________ RTI _____________________________________
 
         movb #$23,RTICTL        ; M = 2 n = 3
         bset CRGINT,#$80        ; activa rti
 ;_______________________________________________________________________________
-
-
 
 
 ;___________________________ OC4 y Timmer Overflow _____________________________
@@ -257,16 +632,11 @@ INICIAR_ATD:
 ;_______________________________________________________________________________
 
 
-
-
-
 ;______________________ INICIALIZACION DE DISPLAY 7 SEG ________________________
 
         MOVB #$FF,DDRB            ; Todas salidas puerto B (segentos de display)
         MOVB #$0F,DDRP            ; 4 salidas puerto P (activan cada display)
 ;_______________________________________________________________________________
-
-
 
 
 
@@ -277,12 +647,25 @@ INICIAR_ATD:
 
 
 
-
-
 ;__________________ INICIALIZACION DE K PARA PANTALLA LED ______________________
 
         MOVB #$FF,DDRK  ; Puerto K como salidas
 ;_______________________________________________________________________________
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -305,16 +688,27 @@ INICIAR_ATD:
         CLR BIN2
         MOVW #0,CONT_7SEG
 
-
-
-
-
         jsr LCD         ; Inicializar LCD
 ;_______________________________________________________________________________
 
 
-         ; 1001
-	; X : X : X : MOD_LIB_ACTUAL : MOD_CONF_ACTUAL : MOD_MED_ACTUAL : PH3_EN : PH0_EN :
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        ; X : X : X : MOD_LIB_ACTUAL : MOD_CONF_ACTUAL : MOD_MED_ACTUAL : PH3_EN : PH0_EN :
 
 ;-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_ Main -_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-
 
@@ -382,6 +776,16 @@ mod_med_no_act_LCD:
 
 
 
+
+
+
+
+
+
+
+
+
+
 ;*******************************************************************************
 ;                             SUBRUTINA MODO_MEDICION
 ;*******************************************************************************
@@ -404,6 +808,10 @@ MODO_MEDICION_retornar:
         STAA BIN2
         RTS
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
+
+
+
 
 
 
@@ -683,9 +1091,9 @@ MODO_CONFIG_tcl_lista: ;Ya hay una tecla lista
         JSR BCD_BIN          ;Pasando de BCD a binario
         BCLR BANDERAS,$04   ; Borrando array_ok
         LDAA V_LIM          ; Verificando si tecla es valida
-        CMPA #30
+        CMPA #45
         BLO MODO_CONFIG_tcl_no_valida
-        CMPA #99
+        CMPA #90
         BHI MODO_CONFIG_tcl_no_valida
         MOVB V_LIM,BIN1     ; Pasando el valor programado a BIN1
         RTS
