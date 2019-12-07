@@ -46,6 +46,7 @@
 ;     PA7, R3 -  | B | 0 | E |                                                 *
 ;                -------------                                                 *
 ;                                                                              *
+;                   PB2         PB1         PB0                                *
 ;                  ----        ----        ----                                *
 ;                (||||||)    (      )    (      )                              *
 ;                  ----        ----        ----                                *
@@ -79,6 +80,7 @@
 ;     PA7, R3 -  | B | 0 | E |                                                 *
 ;                -------------                                                 *
 ;                                                                              *
+;                   PB2         PB1         PB0                                *
 ;                  ----        ----        ----                                *
 ;                (      )    (||||||)    (      )                              *
 ;                  ----        ----        ----                                *
@@ -112,6 +114,7 @@
 ;     PA7, R3 -  | B | 0 | E |                                                 *
 ;                -------------                                                 *
 ;                                                                              *
+;                   PB2         PB1         PB0                                *
 ;                  ----        ----        ----                                *
 ;                (      )    (      )    (||||||)                              *
 ;                  ----        ----        ----                                *
@@ -172,7 +175,7 @@ EOM:     EQU $FF
 BANDERAS:       ds 2        ; Banderas del sistema:
 
 ; Descripcion: Se almacena en un WORD todas las banderas del sistema, veremos
-; que la distribucion es de la siguiente forma:
+; 	       que la distribucion es de la siguiente forma:
 
 ; --------- $1000 ----------
 ; X : X : X : MOD_LIB_ACTUAL : MOD_CONF_ACTUAL : MOD_MED_ACTUAL : PH3_EN : PH0_EN
@@ -687,10 +690,9 @@ INICIAR_ATD:
 ;___________________________ OC4 y Timmer Overflow _____________________________
 
         BSET TSCR1,$80 ; TEN = 1 , Habilitando modulo timers
-        BSET TSCR2, $83 ; Preescalador = 8
+        BSET TSCR2, $03 ; Preescalador = 8
         BSET TIE,$10    ; Habilitando interrupcion output compare canal 4
         BSET TIOS,$10   ; Pone como salida canal 4
-        BSET TSCR2,$80         ; Activando interrupcion TO
 
         LDD TCNT
         ADDD #60
@@ -749,9 +751,6 @@ INICIAR_ATD:
         CLR VELOC
         CLR CONT_DIG
         CLR CONT_TICKS
-        CLR BRILLO
-        CLR BIN1
-        CLR BIN2
         MOVW #0,CONT_7SEG
 
         jsr LCD         ; Inicializar LCD
@@ -781,7 +780,8 @@ INICIAR_ATD:
 Main:
         TST V_LIM               ; Verificando que la velocida sea valida
         BEQ mod_conf       ; Si no es asi, solo se puede estar en modo Libre o Config
-        BRSET PTIH,$C0,mod_med  ; Salta a modo medicion
+        BRSET PTIH,$C0,mod_med  ; Salta a modo medicion si es el modo elegido
+        
         ; Este segmento inhabilita y borra todas los respectivos componentes que
         ; podrian causar problemas al venir del modo medicion.
         BCLR BANDERAS,$03     ; Desactiva habilitacion de botones ph3 y ph0
@@ -855,11 +855,15 @@ mod_med_no_act_LCD:
 ;                             SUBRUTINA MODO_MEDICION
 ;*******************************************************************************
 ;                                  Encabezado
-; Descripcion
+; Descripcion Si la velocidad es 0 se ponen los display de 7 segmentos apagados
+; y  se termina la subrutina, en caso contrario se llama a PANT_CTRL para que
+; haga los calculos correspondientes con respecto a la velocidad calculada del
+; vehiculo.
 ;
-; Parametros de entrada (Como se le pasan)
+; Parametros de entrada: Se recibe la velocidad en un byte de memoria llamado
+; VELOC.
 ;
-; Parametros de salida (como se reciben)
+; Parametros de salida: BIN1 y BIN2.
 ;*******************************************************************************
 
 MODO_MEDICION:
@@ -897,9 +901,18 @@ MODO_MEDICION_retornar:
 ; la velocidad del auto cuando esta a 100 metros. Cuando el auto pasa la panta-
 ; lla apaga los display. Esta subrutina es llamada en la subrutina MODO_MEDICION
 ;
-; Parametros de entrada: N/A
+; Parametros de entrada: VELOC: Velocidad a la que va el vehiculo
+;                        V_LIM; Velocida limite del vehiculo
+;                        PANT_CTRL: Bandera que enciende la pantalla de 7 seg
 ;
-; Parametros de salida: N/A
+; Parametros de salida: VELOC: Velocidad invalida al final del ciclo de la sub. $BB
+;		        TICK_EN: Carga el tiempo en que el carro este a 100m de la
+;                                pantalla.
+;                       TICK_DIS: Carga el tiempo en que el carro pase la pantalla.
+;                       ALERTA: Bandera que enciende leds de alerta si la veloci-
+;                               dad del carro es mayor a V_LIM
+;                       CALC_TICKS: Bandera que indica que ya se calcularon los 
+;                                   valores de TICK_EN y TICK_DIS.
 ;*******************************************************************************
 
 PANT_CTRL:
@@ -984,9 +997,12 @@ PANT_CTRL_retornar:
 ; en ese instante actualiza los LEDS, desactiva las interrupciones de TO y KWU y
 ; apaga los display de 7 segmentos.
 ;
-; Parametros de entrada: N/A
+; Parametros de entrada: Bandera MOD_LIB_ACTUAL, si es 1 se actualiza el LCD
+;                        si es 0 ya no se actualiza.
 ;
-; Parametros de salida: N/A
+; Parametros de salida: LEDS: Enciende el led correspondiente de modo libre
+;                       BIN1: Apaga los display en este modo poniendo $BB
+;                       BIN2: Apaga los display en este modo poniendo $BB
 ;*******************************************************************************
 
 LIBRE:
@@ -1195,6 +1211,12 @@ DELAY:
 
 
 
+
+
+
+
+
+
 ;*******************************************************************************
 ;                             SUBRUTINA MODO_CONFIG
 ;*******************************************************************************
@@ -1204,9 +1226,13 @@ DELAY:
 ; TAREA_TECLADO. Al recibir el valor leido en el teclado verifica si es valido,
 ; de ser asi almacena este valor valido en V_LIM.
 ;
-; Parametros de entrada: N/A
+; Parametros de entrada: ARRAY_OK: Bandera que indica que ya hay una velocidad
+;                        ingresada en V_LIM por el teclado. En binario.
+;                        V_LIM: Contiene la velocidad ingresada por el usuario
+;                        en el teclado.
 ;
-; Parametros de salida: N/A
+; Parametros de salida: BIN1: Envia la velocidad maxima a esta variable que es 
+;                       desplegada en los display de 7 segmentos.
 ;*******************************************************************************
 
 
@@ -1271,13 +1297,18 @@ BCD_BIN:
         BEQ BCD_BIN_continuar ;Si solo se presiono una tecla, no guarda V_LIM
         ADDB 0,X         ; Sumando parte baja
         STAB V_LIM         ; Guardando valor binario en cprog
-BCD_BIN_continuar:      ; Borrando NUM_ARRAY
+BCD_BIN_continuar:      ; Borrando NUM_ARRAY para proximo ingreso del teclado
         MOVB #$FF,0,X
         MOVB #$FF,1,-X
         RTS
         
 
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+
+
+
+
+
 
 
 
@@ -1335,6 +1366,18 @@ BIN_BCD2_fin:              ; RETORNANDO
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 ;*******************************************************************************
 ;                             SUBRUTINA CONV_BIN_BCD
 ;*******************************************************************************
@@ -1349,12 +1392,10 @@ BIN_BCD2_fin:              ; RETORNANDO
 ; nario
 ;
 ; Parametros de salida: Devuelve el resultado de los numeros en BCD en las va-
-; riables BCD1 y BCD2 respectivamente.
+; riables BCD1 y BCD2 respectivamente. Por ejemplo el numero $0F en BIN1 y el 
+; numero $0a en BIN2 son devueltos como BCD1 = $15, BCD2 = $10
 ;*******************************************************************************
 
-;Descripcion: Esta subrutina llama a BIN_BCD y guarda los valores en BCD1 y BCD2
-; y hace el control de cuando poner en BCD1 y BCD2 los valores de AA o BB con los
-; cuales se desplegaran -- o nada en los display de 7 segmentos
 CONV_BIN_BCD:
         LDAA BIN1                         ; Verificando si BIN1 es AA o BB
         CMPA #$BB
@@ -1491,13 +1532,15 @@ BCD_7SEG_FIN:
 ; subrutinas como MUX_TECLADO y FORMAR_ARRAY.
 ;
 ; Parametros de entrada:
-;       TECLAS: Contiene la tecla que se acaba de pulsar.
+;       TECLAS: Contiene la tecla que se acaba de pulsar (si es que la hay),
+;               en caso de no estar presionada ninguna tecla el valor de TECLA
+;               es $FF
 
 ;       TECLA_IN: Contiene la tecla validada cuando se suelta el boton pre-
 ;               sionado
 ;                      
 ;       NUM_ARRAY: Arreglo de tamano MAX_TCL que contendra los valores de las
-; 		    teclas leidas
+;         	    teclas leidas
 
 ; 	CONT_REB: Variable que es cargada en esta subrutina, la decrementa la 
 ;               interrupcion RTI, con el fin de controlar rebotes
@@ -1505,7 +1548,7 @@ BCD_7SEG_FIN:
 ; 	TECLA LISTA: Bandera que indica que la tecla esta lista y se puede
 ;                       almacenar.
 
-;T      ECLA LEIDA: Bandera que Indica que se leyo una tecla.
+;       TECLA LEIDA: Bandera que Indica que se leyo una tecla.
 
 ; Parametros de salida:
 ;       NUM_ARRAY: Arreglo de tamano MAX_TCL que contendra los valores de las
@@ -1516,26 +1559,26 @@ TAREA_TECLADO:
         LDX #TECLAS
         LDY #NUM_ARRAY
         TST CONT_REB                 ;Verificando si ya pasaron los rbotes
-        BNE FIN_TAREA_TECLADO
+        BNE FIN_TAREA_TECLADO       ; Si aun se esta contando rebotes la subrutina termina
         JSR MUX_TECLADO             ; Ver si hay alguna tecla presionada
-        LDAA #$FF                   ; Verifica si ya no hay presionada una telca
-        CMPA TECLA
-        BEQ TECLA_LISTA_TT         
-        BRSET BANDERAS+1,$02,TECLA_LEIDA_TT
-        MOVB TECLA, TECLA_IN      
+        LDAA #$FF                   ; Verifica si ya no hay presionada una telca...
+        CMPA TECLA                  ; de ser asi revisa si una tecla fue soltada o si...
+        BEQ TECLA_LISTA_TT          ; simplemente no se ha presionado una tecla.
+        BRSET BANDERAS+1,$02,TECLA_LEIDA_TT ; Si la tecla ya fue leida (TCL_LEIDA = 1) salta
+        MOVB TECLA, TECLA_IN        ; 
         BSET BANDERAS+1,$02       ; TECLA LEIDA = 1
         MOVB #10, CONT_REB
         RTS
 TECLA_LEIDA_TT:                  ; Verificando si la tecla esta lista
         LDAA TECLA               
         CMPA TECLA_IN
-        BEQ PONER_BANDERA_TCL_LISTA
+        BEQ PONER_BANDERA_TCL_LISTA ; Verificando si La tecla es valida por lo que se hace valida
         MOVB #$FF,TECLA
         MOVB #$FF,TECLA_IN
         BCLR BANDERAS+1,$01       ; TECLA LISTA = 0
         BCLR BANDERAS+1,$02       ; TECLA LEIDA = 0
         RTS
-PONER_BANDERA_TCL_LISTA:
+PONER_BANDERA_TCL_LISTA:          ; La tecla ya esta lista y se procesara hasta que se suelte la tecla
         BSET BANDERAS+1,$01       ; TECLA LISTA = 1
         RTS
 TECLA_LISTA_TT:
@@ -1576,13 +1619,13 @@ FIN_TAREA_TECLADO:
 ;
 ; Parametros de entrada:
 ;       TECLA_IN: Contiene la tecla ya validada para analizarla
-
+;
 ;       NUM_ARRAY: Arreglo de tamano MAX_TCL que contendra los valores de las
 ; 		    teclas leidas
-
+;
 ;       CONT_TCL: Cuenta la cantidad de teclas ya almacenadas en el array.
 ;       
-
+;
 ; Parametros de salida:
 ;       NUM_ARRAY: Arreglo de tamano MAX_TCL que contendra los valores de las
 ; 		    teclas leidas
@@ -1762,7 +1805,6 @@ PATRON_LEDS_reiniciar_patron: ; Reiniciando el patron de los LEDS en ph7
 ;       CONT_REB: Lo devuelve en 0 o decrementado por 1
 ;*******************************************************************************
 
-;Descripcion: 
 
 RTI_ISR:        ; Teclado
 
@@ -2074,10 +2116,16 @@ ATD_ISR:
 ; llamada PANT_FLAG que controla el encendido y apagado de la pantalla de 7 SEG.
 
 
-; Parametros de entrada: N/A
-;          
+; Parametros de entrada: 
+;                       TICK_EN: Cantidad de veces que esta interrupcion debe
+;llegar para que se encienta la bandera PANT_FLAG.
+;                       TICK_DIS: Cantidad de veces que esta interrupcion debe
+;llegar para que se apague la bandera PANT_FLAG.
+;                       TICK_VEL: Se incrementa en 1 en cada interrupcion, cuando
+;llega a 255 ya no se cuenta mas
 ; Parametros de salida: Pantflag: Bandera que si es 1 significa que se debe 
 ; encender la pantalla de 7 seg.
+
 ;*******************************************************************************
 
 TCNT_ISR:
