@@ -100,9 +100,6 @@ TICK_DIS:       ds 2
 
         ; 1011 ---- 101F
 VELOC:          ds 1
-VELOC2:          ds 1
-CONT_TICK_VEL_ANTES DS 1
-CONT_TICK_VEL_DESPUES DS 1
 TICK_VEL:       ds 1
 BIN1:           ds 1
 BIN2:           ds 1
@@ -321,13 +318,19 @@ INICIAR_ATD:
 
 ;-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_ Main -_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-
 
-        bset TSCR2,$80
-        BSET PIEH,$09           ; Activando interrupcion PH0,PH3
 Main:
         TST V_LIM               ; Verificando que la velocida sea valida
         BEQ No_es_mod_med       ; Si no es asi, solo se puede estar en modo Libre o Config
         BRSET PTIH,$C0,mod_med  ; Salta a modo medicion
 No_es_mod_med:
+        ; Este segmento inhabilita y borra todas los respectivos componentes que
+        ; podrian causar problemas al venir del modo medicion.
+        BCLR BANDERAS+1,$03     ; Desactiva habilitacion de botones ph3 y ph0
+        CLR VELOC               ; Borra velocidad
+        MOVW #0,TICK_EN         ; Borrando ticks habilitadores de pantalla
+        MOVW #0,TICK_DIS        ; Borrando ticks deshabilitadores de pantalla
+        BCLR BANDERAS,$38       ; Desactiva ALERTA y PANT_FLAG Y CALC_TICKS
+        
         BRCLR PTIH,$C0,mod_conf ; Verificando si es modo config
         JSR LIBRE
         LBRA Main               ; Vuelve al main
@@ -342,6 +345,7 @@ mod_conf:
         JSR CARGAR_LCD
         
         MOVB #$01,LEDS          ; Arreglando los LEDS de modo
+        MOVB #$BB,BIN2          ; Para borrar BIN2 en modo config
         
         BCLR TSCR2,$80          ; Desactivando interrupciones TO y Key Wake Ups
         BCLR PIEH,$09
@@ -360,6 +364,7 @@ mod_med:
         JSR CARGAR_LCD
         
         MOVB #$02,LEDS          ; Arreglando los LEDS de modo
+        BSET BANDERAS+1,$02     ; Activa boton ph3
         
         bset TSCR2,$80          ; Activando interrupciones
         BSET PIEH,$09
@@ -379,6 +384,13 @@ mod_med_no_act_LCD:
 
 ;*******************************************************************************
 ;                             SUBRUTINA MODO_MEDICION
+;*******************************************************************************
+;                                  Encabezado
+; Descripcion
+;
+; Parametros de entrada (Como se le pasan)
+;
+; Parametros de salida (como se reciben)
 ;*******************************************************************************
 
 MODO_MEDICION:
@@ -413,7 +425,7 @@ PANT_CTRL:
         CMPA #99
         BHI PANT_CTRL_vel_no_valida
         CMPA V_LIM              ; Verificando si es mayor a la velocidad maxima
-        BLO PANT_CTRL_calcular_ticks
+        BLS PANT_CTRL_calcular_ticks
         BSET BANDERAS,$10  ; ALARMA <-- 1
 PANT_CTRL_calcular_ticks:
         BRSET BANDERAS,$20,PANT_CTRL_control_pantalla  ; SI CALC_TICKS es 0 sigue
@@ -431,8 +443,6 @@ PANT_CTRL_calcular_ticks:
         IDIV              ; Calculo de  tiempo
         TFR X,D
         STD TICK_DIS        ;guardando tiempo habilitacion
-        ;LSLD               ; TICK_EN * 2
-        ;STD TICK_DIS
         BSET BANDERAS,$20  ; CALC_TICKS = 1, para que solo se haga una vez
         BRA PANT_CTRL_control_pantalla
 PANT_CTRL_vel_no_valida:   ; Si la velocidad no es valida, para imrpimir guiones 2 seg
@@ -1128,13 +1138,11 @@ FIN_RTI_ISR_cont_reb:                  ; Timer cuenta (modo run)
 ;*******************************************************************************
 ;                                INTERRUPCION PHO_ISR
 ;*******************************************************************************
-;Descripcion: Esta interrupcion se divide en 4 subrunitas:
+;Descripcion: Esta interrupcion se divide en 2 subrunitas:
 ; PTH0:
 
 ; PTH3:
 CALCULAR:
-                ;BSET PIFH,$09
-
                 BRSET PIFH,$01,PTH0
                 BRSET PIFH,$08,PTH3
                 RTI
@@ -1152,10 +1160,13 @@ PTH0:
         LDD #6624         ; Calculo de velocidad (ver hoja de calculo informe)
         IDIV              ; Calculo de la velocidad
         TFR X,D
-        STAB VELOC         ;guardando velocidad
-        STAB VELOC2
-        MOVB TICK_VEL,CONT_TICK_VEL_DESPUES
         CLR TICK_VEL
+        TSTA              ; Si queda algo en parte alta de A, es porque la velocidad es invalida
+        BNE PTH0_velocidad_invalida
+        STAB VELOC         ;guardando velocidad que es valida
+        BRA PTH0_retornar
+PTH0_velocidad_invalida:  ; Guardando velocidad invalida
+        MOVB #$FF,VELOC
 PTH0_retornar:
         BSET PIFH,$01     ; Desactivando bandera de interrupcion
         RTI
@@ -1174,10 +1185,9 @@ PTH3:
         LDX #Msj_medicion_1   ; Cargando LCD
         LDY #Msj_medicion_calculando_2
         BSET PIFH,$08     ; Desactivando interrupcion
-        ;CLI               ; activando interrupciones
-        ;JSR CARGAR_LCD
+        CLI               ; activando interrupciones
+        JSR CARGAR_LCD
 PTH3_retornar:
-        MOVB TICK_VEL,CONT_TICK_VEL_ANTES
         BSET PIFH,$08     ; Desactivando interrupcion
         RTI
         
@@ -1212,7 +1222,6 @@ PTH3_retornar:
 ; ver el enunciado de la tarea
 OC4_ISR:
         BSET TFLG1,$10  ; Borrando bandera interrupcion
-        ;cli
         LDD CONT_7SEG                 ; Calculando si ya pasaron 100ms
         CPD #5000
         BEQ OC4_ISR_llamar
@@ -1329,8 +1338,6 @@ ATD_ISR:
         MUL             ;( (20 * POT) / 255 ) * 5
         STAB BRILLO
 
-
-
         RTI
 
 ;---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
@@ -1352,8 +1359,11 @@ ATD_ISR:
 ;Descripcion:
 
 TCNT_ISR:
-        BRCLR BANDERAS+1,$01,TCNT_ISR_no_contar
-        INC TICK_VEL
+        BRCLR BANDERAS+1,$01,TCNT_ISR_no_contar ; Si ph0 no esta activa, no cuenta.
+        LDAA #$FF                               ; Si se va a rebasar, no cuenta mas.
+        CMPA TICK_VEL
+        BEQ TCNT_ISR_no_contar
+        INC TICK_VEL                            ; Cuenta un tick
 TCNT_ISR_no_contar:
         LDD TICK_EN     ; Verificando si TICK_EN llego a 0, sino lo decrementa
         BEQ TCNT_ISR_set_pant_flag
