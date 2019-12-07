@@ -1,28 +1,43 @@
 ;*******************************************************************************
-;                                 TAREA 5                                      *
-;                         PANTALLAS MULTIPLEXADAS                              *
+;                              PROYECTO FINAL                                  *
+;                                RADAR 623                                     *
 ;*******************************************************************************
 ;                                                                              *
 ;       UNIVERSIDAD DE COSTA RICA                                              *
-;       FECHA 02/11/19                                                         *
+;       FECHA 09/12/19                                                         *
 ;       AUTOR: YEISON RODRIGUEZ PACHECO B56074                                 *
 ;       COREREO: yeisonrodriguezpacheco@gmail.com                              *
+;       PROFESOR: GEOVANNY DELGADO.                                            *
 ;                                                                              *
-;                                                                              *
-; Descripcion: Este programa se encarga de realizar todo el control en una fa- *
-; brica que hace bolsas de tornillos. El programa funciona en dos modos:
-; Modo config: En este modo se ingresan datos en el teclado de la tarjeta, el
-; teclado esta definido como vemos a continuacion:
-;                                                                              *
+; Descripcion: Este proyecto consiste en un producto que se encarga de calcu-  *
+; lar la velocidad a la que se despliega un carro (al pasar por encima de dos  *
+; sensores), y respectivamente mostrarla en una pantalla cuando el conductor   *
+; se encuentre a 100 metros de la pantalla.                                    *
+; Este producto permite configurar una velocidad maxima, en caso de que el con-*
+; ductor vaya mas rapido que dicha velocidad, se encenderan unos leds de alarma*
+; que serviran de aviso para que el chofer reduzca la velocidad.               *
+                                   
+; Debido a que es un prototipo, los sensores que detectan el carro son acciona-*
+; dos con los botones ph3 y ph0.                                               *
+
+; El sistema tiene 3 modos de funcionamiento:
+
+
+; Modo libre: En este modo el sistema simplemente está esperando y no hace nada
+; mas que mostrar el nombre del producto. Para este modo se debe tener ph7 ON
+; y PH6 OFF. En este modo se encendera el LED PB3.
+
+; A continuacion tenemos una ilustracion del modo:
+;______________________________________________________________________________
 ;                 C0  C1  C2                                                   *
 ;                 PA0 PA1 PA2                                                  *
-;                  |   |   |                                                   *
-;                -------------                                                 *
-;                |   |   |   |                                                 *
-;     PA4, R0 -  | 1 | 2 | 3 |                                                 *
-;                -------------                                                 *
-;                |   |   |   |                                                 *
-;     PA5, R1 -  | 4 | 5 | 6 |                                                 *
+;                  |   |   |            PH7     PH6                            *
+;                -------------        ------   ------                          *
+;                |   |   |   |        ||||||   |    |                          *
+;     PA4, R0 -  | 1 | 2 | 3 |        ||||||   |    |                          *
+;                -------------        |    |   ||||||                          *
+;                |   |   |   |        |    |   ||||||                          *
+;     PA5, R1 -  | 4 | 5 | 6 |        ------   ------                          *
 ;                -------------                                                 *
 ;                |   |   |   |                                                 *
 ;     PA6, R2 -  | 7 | 8 | 9 |                                                 *
@@ -31,27 +46,78 @@
 ;     PA7, R3 -  | B | 0 | E |                                                 *
 ;                -------------                                                 *
 ;                                                                              *
-; Al ingresar el enter se guarda la cantidad de tornillos que tendra la bolsa, *
-; seguidamente si se baja el dipswitch numero 7 se pasara al modo run, que se  *
-; detalla a continuacion.                                                      *
-; Modo Run: El modo run es cuando se procede a contar los tornillos en la banda*
-; ,se muestra la cuenta de los tornillos en los display 3 y 4,y cuando se llena*
-; la bolsa se activa un rele que se encarga de dar el control al sistema que   *
-; empaca la bolsa. Para llenar otra bolsa se debe pulsar el sw5.               *
+;                  ----        ----        ----                                *
+;                (||||||)    (      )    (      )                              *
+;                  ----        ----        ----                                *
+;                 LIBRE        MED.        CONF                                *
 ;                                                                              *
-; Si hay dificultades para ver los display, se debe pulsar el sw2 para subir el*
-; brillo de los display, si por el contrario se desea bajar, presionar sw3.    *
+;______________________________________________________________________________
+
+
+; Modo Medicion: En este Modo de funcionamiento el sistema esta esperando que 
+; un carro pase por el primer sensor (ph3), al pasar por este se pone ne la LCD
+; el mensaje (CALCULANDO), y cuando se presiona ph0 se calcula la velocidad del 
+; vehiculo. Pero no es desplegada hasta que el vehiculo este a 100 metros de la
+; misma. En este modo se enciende el led pb1.
+
+; A continuacion tenemos una ilustracion del modo:
+;______________________________________________________________________________
+;                 C0  C1  C2                                                   *
+;                 PA0 PA1 PA2                                                  *
+;                  |   |   |            PH7     PH6                            *
+;                -------------        ------   ------                          *
+;                |   |   |   |        ||||||   ||||||                          *
+;     PA4, R0 -  | 1 | 2 | 3 |        ||||||   ||||||                          *
+;                -------------        |    |   |    |                          *
+;                |   |   |   |        |    |   |    |                          *
+;     PA5, R1 -  | 4 | 5 | 6 |        ------   ------                          *
+;                -------------                                                 *
+;                |   |   |   |                                                 *
+;     PA6, R2 -  | 7 | 8 | 9 |                                                 *
+;                -------------                                                 *
+;                |   |   |   |                                                 *
+;     PA7, R3 -  | B | 0 | E |                                                 *
+;                -------------                                                 *
 ;                                                                              *
-; Para resetear el contador de bolsas, presionar sw4                           *
+;                  ----        ----        ----                                *
+;                (      )    (||||||)    (      )                              *
+;                  ----        ----        ----                                *
+;                 LIBRE        MED.        CONF                                *
+;______________________________________________________________________________
+
+
+
+; Modo Configuracion:  En este modo el sistema esta esperando para ser configu-
+; rado con una velocidad maxima, para esto se tiene el teclado del producto 
+; con el cual se pueden ingresar numeros de 45 a 90 KM/H. El led PB0 estara
+; encendido en este modo
+
+; A continuacion tenemos una ilustracion del modo:
+;______________________________________________________________________________
 ;                                                                              *
-; Si se desea volver al modo config para cambiar el tamano de las bolsas, sim- *
-; plemente se debe subir el dipswitch 7 nuevamente y repetir el proceso.       *
+;                 C0  C1  C2                                                   *
+;                 PA0 PA1 PA2                                                  *
+;                  |   |   |            PH7     PH6                            *
+;                -------------        ------   ------                          *
+;                |   |   |   |        |    |   |    |                          *
+;     PA4, R0 -  | 1 | 2 | 3 |        |    |   |    |                          *
+;                -------------        ||||||   ||||||                          *
+;                |   |   |   |        ||||||   ||||||                          *
+;     PA5, R1 -  | 4 | 5 | 6 |        ------   ------                          *
+;                -------------                                                 *
+;                |   |   |   |                                                 *
+;     PA6, R2 -  | 7 | 8 | 9 |                                                 *
+;                -------------                                                 *
+;                |   |   |   |                                                 *
+;     PA7, R3 -  | B | 0 | E |                                                 *
+;                -------------                                                 *
 ;                                                                              *
-; En el modo config siempre estara encendido el led PB1, en el modo run el PB0.*
-;                                                                              *
-; En la pantalla LED del dispositivo se mostrara informacion relevante sobre   *
-; las variables desplegadas en los display de 7 segmentes.                     *
-;                                                                              *
+;                  ----        ----        ----                                *
+;                (      )    (      )    (||||||)                              *
+;                  ----        ----        ----                                *
+;                 LIBRE        MED.        CONF                                *
+;______________________________________________________________________________
+
 ;* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 
 
@@ -101,7 +167,7 @@ EOM:     EQU $FF
 ;*******************************************************************************
 
 
-	ORG $1000
+        ORG $1000
 ;-------------------------------- $1000 a $1001 --------------------------------
 BANDERAS:       ds 2        ; Banderas del sistema:
 
@@ -676,8 +742,8 @@ INICIAR_ATD:
         MOVB #$FF,TECLA
         MOVB #$FF,TECLA_IN
         CLR CONT_REB
-        CLR BANDERAS
-        BSET BANDERAS+1,$1E  ; Activando: MOD_MED_ACTUAL,MOD_CONFIG_ACTUAL,MOD_LIB_ACTUAL,PH3_EN.
+        MOVW #0,BANDERAS
+        BSET BANDERAS,$1E  ; Activando: MOD_MED_ACTUAL,MOD_CONFIG_ACTUAL,MOD_LIB_ACTUAL,PH3_EN.
         CLR CONT_TCL
         CLR V_LIM
         CLR VELOC
@@ -718,20 +784,20 @@ Main:
         BRSET PTIH,$C0,mod_med  ; Salta a modo medicion
         ; Este segmento inhabilita y borra todas los respectivos componentes que
         ; podrian causar problemas al venir del modo medicion.
-        BCLR BANDERAS+1,$03     ; Desactiva habilitacion de botones ph3 y ph0
+        BCLR BANDERAS,$03     ; Desactiva habilitacion de botones ph3 y ph0
         CLR VELOC               ; Borra velocidad
         MOVW #0,TICK_EN         ; Borrando ticks habilitadores de pantalla
         MOVW #0,TICK_DIS        ; Borrando ticks deshabilitadores de pantalla
-        BCLR BANDERAS,$38       ; Desactiva ALERTA y PANT_FLAG Y CALC_TICKS
+        BCLR BANDERAS+1,$38       ; Desactiva ALERTA y PANT_FLAG Y CALC_TICKS
         
         BRCLR PTIH,$C0,mod_conf ; Verificando si es modo config
         JSR LIBRE
         LBRA Main               ; Vuelve al main
 
 mod_conf:
-        BRCLR BANDERAS+1,$08,mod_conf_no_act_LCD
-        BSET BANDERAS+1,$14      ; Arreglando banderas de cambios de modo
-        BCLR BANDERAS+1,$08
+        BRCLR BANDERAS,$08,mod_conf_no_act_LCD
+        BSET BANDERAS,$14      ; Arreglando banderas de cambios de modo
+        BCLR BANDERAS,$08
 
         LDX #Msj_config_1      ; Cargando LCD con mensaje de modo configuracion
         LDY #Msj_config_2
@@ -748,16 +814,16 @@ mod_conf_no_act_LCD:
         LBRA Main               ; Vuelve al main
         
 mod_med:
-        BRCLR BANDERAS+1,$04,mod_med_no_act_LCD
-        BSET BANDERAS+1,$18      ; Arreglando banderas de cambios de modo
-        BCLR BANDERAS+1,$04
+        BRCLR BANDERAS,$04,mod_med_no_act_LCD
+        BSET BANDERAS,$18      ; Arreglando banderas de cambios de modo
+        BCLR BANDERAS,$04
         
         LDX #Msj_medicion_1      ; Cargando LCD con mensaje de modo medicion
         LDY #Msj_medicion_esperando_2
         JSR CARGAR_LCD
         
         MOVB #$02,LEDS          ; Arreglando los LEDS de modo
-        BSET BANDERAS+1,$02     ; Activa boton ph3
+        BSET BANDERAS,$02     ; Activa boton ph3
         
         bset TSCR2,$80          ; Activando interrupciones
         BSET PIEH,$09
@@ -823,6 +889,18 @@ MODO_MEDICION_retornar:
 ;*******************************************************************************
 ;                             SUBRUTINA PANT_CTRL
 ;*******************************************************************************
+;                                  Encabezado
+; Descripcion: Esta subrutina es utilizada en el modo medicion para controlar
+; la temporizacion de todo el proceso de control de la pantalla LCD y 7 Seg
+; despues de haber presionado el boton ph0. Por lo que se hace el calculo de
+; cuanto tiempo falta para que llegue el auto a 100m de la pantalla y despliega
+; la velocidad del auto cuando esta a 100 metros. Cuando el auto pasa la panta-
+; lla apaga los display. Esta subrutina es llamada en la subrutina MODO_MEDICION
+;
+; Parametros de entrada: N/A
+;
+; Parametros de salida: N/A
+;*******************************************************************************
 
 PANT_CTRL:
         BCLR PIEH,$09           ; Desactivando interrupcion PH0,PH3
@@ -833,9 +911,9 @@ PANT_CTRL:
         BHI PANT_CTRL_vel_no_valida
         CMPA V_LIM              ; Verificando si es mayor a la velocidad maxima
         BLS PANT_CTRL_calcular_ticks
-        BSET BANDERAS,$10  ; ALARMA <-- 1
+        BSET BANDERAS+1,$10  ; ALARMA <-- 1
 PANT_CTRL_calcular_ticks:
-        BRSET BANDERAS,$20,PANT_CTRL_control_pantalla  ; SI CALC_TICKS es 0 sigue
+        BRSET BANDERAS+1,$20,PANT_CTRL_control_pantalla  ; SI CALC_TICKS es 0 sigue
         LDAB VELOC      ; DIVISOR
         CLRA
         TFR D,X
@@ -850,7 +928,7 @@ PANT_CTRL_calcular_ticks:
         IDIV              ; Calculo de  tiempo
         TFR X,D
         STD TICK_DIS        ;guardando tiempo habilitacion
-        BSET BANDERAS,$20  ; CALC_TICKS = 1, para que solo se haga una vez
+        BSET BANDERAS+1,$20  ; CALC_TICKS = 1, para que solo se haga una vez
         BRA PANT_CTRL_control_pantalla
 PANT_CTRL_vel_no_valida:   ; Si la velocidad no es valida, para imrpimir guiones 2 seg
         LDAA #$AA
@@ -861,7 +939,7 @@ PANT_CTRL_vel_no_valida:   ; Si la velocidad no es valida, para imrpimir guiones
         MOVB #$AA,VELOC     ; Para no volver a entrar aqui
 
 PANT_CTRL_control_pantalla: ; Demas logica de la pantalla
-        BRCLR BANDERAS,$08,PANT_CTRL_pant_encendida ; si pant_flh es 0 salta
+        BRCLR BANDERAS+1,$08,PANT_CTRL_pant_encendida ; si pant_flh es 0 salta
         LDAA #$BB                   ; Verificando si ya se imprimio la pantalla 1 vez
         CMPA BIN1
         BEQ PANT_CTRL_pant_vel_encendida
@@ -888,8 +966,8 @@ PANT_CTRL_ultimo_ciclo:
         STAA BIN2
         CLR VELOC
         BSET PIEH,$09           ; Activando interrupcion PH0,PH3
-        BCLR BANDERAS,$30       ; CALC_TICKS = 0 y ALERTA = 0
-        BSET BANDERAS+1,$02     ; Bandera que habilita ph3
+        BCLR BANDERAS+1,$30       ; CALC_TICKS = 0 y ALERTA = 0
+        BSET BANDERAS,$02     ; Bandera que habilita ph3
 PANT_CTRL_retornar:
         RTS
 
@@ -900,15 +978,24 @@ PANT_CTRL_retornar:
 ;*******************************************************************************
 ;                             SUBRUTINA LIBRE
 ;*******************************************************************************
-;Descripcion: Esta subrutina inicializa la subrutina LCD
+;                                  Encabezado
+; Descripcion: Esta subrutina controla el modo libre, simplemente se encarga de
+; actualizar la pantalla LCD una unica vez cuando se llega a este modo. Tambien
+; en ese instante actualiza los LEDS, desactiva las interrupciones de TO y KWU y
+; apaga los display de 7 segmentos.
+;
+; Parametros de entrada: N/A
+;
+; Parametros de salida: N/A
+;*******************************************************************************
 
 LIBRE:
-        BRSET BANDERAS+1,$10,mod_libre_actualizar_lcd
+        BRSET BANDERAS,$10,mod_libre_actualizar_lcd
         RTS
 mod_libre_actualizar_lcd:
         
-        BSET BANDERAS+1,$0C     ; Cargando banderas correspondientes de camb modo
-        BCLR BANDERAS+1,$10     ; Borrando bandera de este modo
+        BSET BANDERAS,$0C     ; Cargando banderas correspondientes de camb modo
+        BCLR BANDERAS,$10     ; Borrando bandera de este modo
         
         LDX #Msj_libre_1       ; Cargando LCD
         LDY #Msj_libre_2
@@ -931,21 +1018,29 @@ mod_libre_actualizar_lcd:
 ;*******************************************************************************
 ;                             SUBRUTINA LCD
 ;*******************************************************************************
-;Descripcion: Esta subrutina inicializa la subrutina LCD
+;                                  Encabezado
+; Descripcion: Esta subrutina se encarga de inicializar la pantalla LCD en el
+; comienzo de la ejecucion del programa. Esta operacion solo se realiza una vez
+; antes de entrar al main principal.
+;
+; Parametros de entrada: N/A
+;
+; Parametros de salida: N/A
+;*******************************************************************************
 LCD:
         LDX #iniDsp
 Loop_lcd_inic:
         LDAA 1,X+
         CMPA #EOM
         BEQ FIN_Loop_lcd_inic
-        BCLR BANDERAS, $80            ; para mandar un comando
+        BCLR BANDERAS+1, $80            ; para mandar un comando
         JSR SEND
         MOVB D60uS,CONT_DELAY
         JSR DELAY
         BRA Loop_lcd_inic
 FIN_Loop_lcd_inic:
         LDAA #$01              ; CLEAR DISPLAY
-        BCLR BANDERAS, $80            ; para mandar un comando
+        BCLR BANDERAS+1, $80            ; para mandar un comando
         JSR SEND
         MOVB D2ms,CONT_DELAY
         JSR DELAY
@@ -959,8 +1054,15 @@ FIN_Loop_lcd_inic:
 ;*******************************************************************************
 ;                             SUBRUTINA SEND
 ;*******************************************************************************
-;Descripcion: Esta subrutina envia datos o comandos a pantalla LCD, recibe como
-; parametro la bandera COMANDO_DATO en 0 si es comando, 1 si es dato
+;                                  Encabezado
+; Descripcion: Esta subrutina envia datos o comandos a pantalla LCD. Es utiliza-
+; da por la subrutina CARGAR_LCD y LCD.
+;
+; Parametros de entrada: La bandera COMANDO_DATO. Si esta en 0 se manda un co-
+; mando. Si esta en 1 se desea mandar un dato.
+;
+; Parametros de salida: N/A
+;*******************************************************************************
 
 SEND:
         PSHA
@@ -968,7 +1070,7 @@ SEND:
         LSRA
         LSRA
         STAA PORTK
-        BRCLR BANDERAS,$80,SEND_comando  ; 0 COMANDO, 1 DATO
+        BRCLR BANDERAS+1,$80,SEND_comando  ; 0 COMANDO, 1 DATO
         BSET PORTK,$01
         BRA SEND_continuar
 SEND_comando:
@@ -984,7 +1086,7 @@ SEND_continuar:
         LSLA
         LSLA
         STAA PORTK
-        BRCLR BANDERAS,$80,SEND_comando2  ; 0 COMANDO, 1 DATO
+        BRCLR BANDERAS+1,$80,SEND_comando2  ; 0 COMANDO, 1 DATO
         BSET PORTK,$01
         BRA SEND_continuar2
 SEND_comando2:
@@ -1012,11 +1114,21 @@ SEND_continuar2:
 ;*******************************************************************************
 ;                             SUBRUTINA CARGAR_LCD
 ;*******************************************************************************
-;Descripcion: Esta subrutina carga los mensajes en la LCD
+;                                  Encabezado
+; Descripcion: Esta subrutina se encarga de enviar mensajes a la pantalla LCD.
+; Solo es necesario pasar los mensajes por los punteros X y Y y la subrutina se
+; encarga de hacer el resto.
+;
+; Parametros de entrada: En X recibe el puntero de inicio del mensaje que se
+; quiere desplegar en la parte de arriba de la LCD. En Y recibe el mensaje que
+; se quiere desplegar en la parte de abajo de la LCD.
+;
+; Parametros de salida: N/A
+;*******************************************************************************
 
 CARGAR_LCD:
         LDAA ADD_L1
-        BCLR BANDERAS, $80            ; para mandar un comando
+        BCLR BANDERAS+1, $80            ; para mandar un comando
         JSR SEND
         MOVB D60uS,CONT_DELAY
         JSR DELAY
@@ -1024,14 +1136,14 @@ CARGAR_LCD_first_loop:
         LDAA 1,X+
         CMPA #EOM
         BEQ CARGAR_LCD_first_loop_end
-        BSET BANDERAS, $80            ; para mandar un dato
+        BSET BANDERAS+1, $80            ; para mandar un dato
         JSR SEND
         MOVB D60uS,CONT_DELAY
         JSR DELAY
         BRA CARGAR_LCD_first_loop
 CARGAR_LCD_first_loop_end:
         LDAA ADD_L2
-        BCLR BANDERAS, $80            ; para mandar un comando
+        BCLR BANDERAS+1, $80            ; para mandar un comando
         JSR SEND
         MOVB D60uS,CONT_DELAY
         JSR DELAY
@@ -1040,7 +1152,7 @@ CARGAR_LCD_SECOND_loop:
         LDAA 1,Y+
         CMPA #EOM
         BEQ CARGAR_LCD_SECOND_loop_end
-        BSET BANDERAS, $80            ; para mandar un dato
+        BSET BANDERAS+1, $80            ; para mandar un dato
         JSR SEND
         MOVB D60uS,CONT_DELAY
         JSR DELAY
@@ -1059,10 +1171,18 @@ CARGAR_LCD_SECOND_loop_end:
 ;*******************************************************************************
 ;                             SUBRUTINA DELAY
 ;*******************************************************************************
-;Descripcion: Esta subrutina se encarga de generar delays a partir de la variable
-;CONT_DELAY. Por ejemplo un valor de CONT_DELAY de 50 da una interrupcion de 1x10-3
-; Debido a que cada decremento de CONT_DELAY se da cada 20us
-
+;                                  Encabezado
+; Descripcion: Esta subrutina se encarga de generar delays a partir de la variable
+; CONT_DELAY. Esta subrutina debe ser utilizada con precaucion ya que es senci-
+; llo de notar que detiene el procesador (no las interrupciones) por alguna can-
+; tidad de tiempo programada por el usuario.
+;
+; Parametros de entrada: Se recibe un valor en CONT_DELAY. Por ejemplo un valor
+; de CONT_DELAY de 50 da una interrupcion de 1x10-3 segundos, debido a que cada
+; decremento de CONT_DELAY se da cada 20us por la interrupcion OC4.
+;
+; Parametros de salida: N/A
+;*******************************************************************************
 DELAY:
         TST CONT_DELAY
         BNE DELAY
@@ -1078,17 +1198,26 @@ DELAY:
 ;*******************************************************************************
 ;                             SUBRUTINA MODO_CONFIG
 ;*******************************************************************************
-;Descripcion:
+;                                  Encabezado
+; Descripcion: Esta subrutina se encarga de administrar el modo configuracion.
+; Su principal tarea es llamar a las subrutinas que controlan el teclado como
+; TAREA_TECLADO. Al recibir el valor leido en el teclado verifica si es valido,
+; de ser asi almacena este valor valido en V_LIM.
+;
+; Parametros de entrada: N/A
+;
+; Parametros de salida: N/A
+;*******************************************************************************
 
 
 MODO_CONFIG:
-        BRSET BANDERAS,$04,MODO_CONFIG_tcl_lista ;Verificando si Ya hay una tecla lista
+        BRSET BANDERAS+1,$04,MODO_CONFIG_tcl_lista ;Verificando si Ya hay una tecla lista
         JSR TAREA_TECLADO                        ;Leyendo una tecla
         MOVB V_LIM,BIN1                        ; Moviendo valor de V_lim a BIN1
         RTS
 MODO_CONFIG_tcl_lista: ;Ya hay una tecla lista
         JSR BCD_BIN          ;Pasando de BCD a binario
-        BCLR BANDERAS,$04   ; Borrando array_ok
+        BCLR BANDERAS+1,$04   ; Borrando array_ok
         LDAA V_LIM          ; Verificando si tecla es valida
         CMPA #45
         BLO MODO_CONFIG_tcl_no_valida
@@ -1117,6 +1246,19 @@ MODO_CONFIG_tcl_no_valida:
 ;*******************************************************************************
 ;                             SUBRUTINA BCD_BIN
 ;*******************************************************************************
+;                                  Encabezado
+; Descripcion: Esta subrutina se encarga de realizar la conversion de los nume-
+; ros leidos en el teclado matricial que estan en BCD y pasarlo a binario.
+; Ademas esta subrutina controla que los numeros enviados sigan el formato:
+; 03, 06, y no el formato 6, 3, porque genera problemas. El numero convertido
+; es guardado en V_LIM.
+;
+; Parametros de entrada: En la direccion NUM_ARRAY se envian los numeros a con-
+; vertir a binario. La cantidad de numeros esta dada por MAX_TCL.
+;
+; Parametros de salida: Guarda velocidad en binario en V_LIM
+;*******************************************************************************
+
 ;Descripcion: Esta subrutina se encarga de realizar la conversion de los numeros
 ; leidos en el teclado a binario y guardarlo en CPROG.
 BCD_BIN:
@@ -1126,10 +1268,10 @@ BCD_BIN:
         MUL             ; NUMERO MAS SIGNIFICATIVO MULTIPLICADO POR 10
         LDAA 0,X
         CMPA #$FF
-        BEQ BCD_BIN_continuar
+        BEQ BCD_BIN_continuar ;Si solo se presiono una tecla, no guarda V_LIM
         ADDB 0,X         ; Sumando parte baja
         STAB V_LIM         ; Guardando valor binario en cprog
-BCD_BIN_continuar:
+BCD_BIN_continuar:      ; Borrando NUM_ARRAY
         MOVB #$FF,0,X
         MOVB #$FF,1,-X
         RTS
@@ -1146,6 +1288,15 @@ BCD_BIN_continuar:
 
 ;*******************************************************************************
 ;                             SUBRUTINA BIN_BCD
+;*******************************************************************************
+;                                  Encabezado
+; Descripcion: Esta subrutina se encarga de realizar la conversion de numeros
+; de binario a BCD. Solo realiza conversiones de numeros de 0 a 99
+;
+; Parametros de entrada: Se le debe pasar un numero en binario por el acumulador
+; A.
+;
+; Parametros de salida: Devuelve el resultado en la variable BCD_L.
 ;*******************************************************************************
 
 ;Descripcion: Esta subrutina convierte un numero pasado como parametro por el acu-
@@ -1186,6 +1337,19 @@ BIN_BCD2_fin:              ; RETORNANDO
 
 ;*******************************************************************************
 ;                             SUBRUTINA CONV_BIN_BCD
+;*******************************************************************************
+;                                  Encabezado
+; Descripcion: Esta subrutina se encarga de verificar si los numeros enviados
+; en BIN1 y BIN2 son $BB o $AA, de ser asi solamente guarda los valores de BIN1
+; y BIN2 en BCD1 y BCD2 respectivamente. En caso de que las variables contengan
+; otro valor, se llama a la subrutina BIN_BCD y se guardan los valores converti-
+; dos en BCD a BCD1 y BCD2.
+;
+; Parametros de entrada: Las variables BIN1 y BIN2 que contienen numeros en bi-
+; nario
+;
+; Parametros de salida: Devuelve el resultado de los numeros en BCD en las va-
+; riables BCD1 y BCD2 respectivamente.
 ;*******************************************************************************
 
 ;Descripcion: Esta subrutina llama a BIN_BCD y guarda los valores en BCD1 y BCD2
@@ -1249,9 +1413,18 @@ CONV_BIN_BCD_retornar:
 ;*******************************************************************************
 ;                             SUBRUTINA BCD_7SEG
 ;*******************************************************************************
-;Descripcion: Esta subrutina pasa valores de BCD1 y BCD2 a DISP1,DISP2,DISP3,
-; DISP4, en su respectivo codigo de 7 segmentos. Si hay ceros a la izquierda
-; se envia un codigo $fx
+;                                  Encabezado
+; Descripcion: Esta subrutina toma los valores almacenados en BCD1 y BCD2 y los
+; codifica en codigo de 7 segmentos para ser guardados en las variables DISP1,
+; DISP2, DISP3, DISP4. Cada uno de estos display representa un display de la
+; dragon 12
+;
+; Parametros de entrada: Las variables BCD1 y BCD2 que contienen numeros en BCD
+;
+;
+; Parametros de salida: Devuelve el resultado en DISP1,DISP2, DISP3, DISP4.
+;*******************************************************************************
+
 
 BCD_7SEG:
         LDX #BCD1          ;Declaracion punteros iniciales
@@ -1312,41 +1485,66 @@ BCD_7SEG_FIN:
 ;*******************************************************************************
 ;                             SUBRUTINA TAREA_TECLADO
 ;*******************************************************************************
-; Descripcion: Esta subrutina se encarga de hacer toda la logica para leer una
-; tecla de manera correcta.
+;                                  Encabezado
+; Descripcion: Esta subrutina se encarga de realizar toda la logica para poder
+; leer una tecla del teclado, esto se realiza mediante distintos llamados a
+; subrutinas como MUX_TECLADO y FORMAR_ARRAY.
+;
+; Parametros de entrada:
+;       TECLAS: Contiene la tecla que se acaba de pulsar.
+
+;       TECLA_IN: Contiene la tecla validada cuando se suelta el boton pre-
+;               sionado
+;                      
+;       NUM_ARRAY: Arreglo de tamano MAX_TCL que contendra los valores de las
+; 		    teclas leidas
+
+; 	CONT_REB: Variable que es cargada en esta subrutina, la decrementa la 
+;               interrupcion RTI, con el fin de controlar rebotes
+
+; 	TECLA LISTA: Bandera que indica que la tecla esta lista y se puede
+;                       almacenar.
+
+;T      ECLA LEIDA: Bandera que Indica que se leyo una tecla.
+
+; Parametros de salida:
+;       NUM_ARRAY: Arreglo de tamano MAX_TCL que contendra los valores de las
+; 		    teclas leidas
+;*******************************************************************************
+
 TAREA_TECLADO:
         LDX #TECLAS
         LDY #NUM_ARRAY
-        TST CONT_REB
+        TST CONT_REB                 ;Verificando si ya pasaron los rbotes
         BNE FIN_TAREA_TECLADO
-        JSR MUX_TECLADO
-        LDAA #$FF
+        JSR MUX_TECLADO             ; Ver si hay alguna tecla presionada
+        LDAA #$FF                   ; Verifica si ya no hay presionada una telca
         CMPA TECLA
-        BEQ TECLA_LISTA_TT
-        BRSET BANDERAS,$02,TECLA_LEIDA_TT
-        MOVB TECLA, TECLA_IN
-        BSET BANDERAS,$02       ; TECLA LEIDA = 1
+        BEQ TECLA_LISTA_TT         
+        BRSET BANDERAS+1,$02,TECLA_LEIDA_TT
+        MOVB TECLA, TECLA_IN      
+        BSET BANDERAS+1,$02       ; TECLA LEIDA = 1
         MOVB #10, CONT_REB
         RTS
-TECLA_LEIDA_TT:
-        LDAA TECLA
+TECLA_LEIDA_TT:                  ; Verificando si la tecla esta lista
+        LDAA TECLA               
         CMPA TECLA_IN
         BEQ PONER_BANDERA_TCL_LISTA
         MOVB #$FF,TECLA
         MOVB #$FF,TECLA_IN
-        BCLR BANDERAS,$01       ; TECLA LISTA = 0
-        BCLR BANDERAS,$02       ; TECLA LEIDA = 0
+        BCLR BANDERAS+1,$01       ; TECLA LISTA = 0
+        BCLR BANDERAS+1,$02       ; TECLA LEIDA = 0
         RTS
 PONER_BANDERA_TCL_LISTA:
-        BSET BANDERAS,$01       ; TECLA LISTA = 1
+        BSET BANDERAS+1,$01       ; TECLA LISTA = 1
         RTS
 TECLA_LISTA_TT:
-        BRSET BANDERAS,$01,FORM_ARR_TT ; TECLA LISTA = 1?
+        BRSET BANDERAS+1,$01,FORM_ARR_TT ; TECLA LISTA = 1?
         RTS
 FORM_ARR_TT:
-        BCLR BANDERAS,$01       ; TECLA LISTA = 0
-        BCLR BANDERAS,$02       ; TECLA LEIDA = 0
-        JSR FORMAR_ARRAY
+        BCLR BANDERAS+1,$01       ; TECLA LISTA = 0
+        BCLR BANDERAS+1,$02       ; TECLA LEIDA = 0
+        JSR FORMAR_ARRAY          ; Tecla lista para formar el araray
 FIN_TAREA_TECLADO:
         RTS
 
@@ -1369,11 +1567,27 @@ FIN_TAREA_TECLADO:
 ;*******************************************************************************
 ;                                SUBRUTINA FORMAR_ARRAY
 ;*******************************************************************************
-;Descripcion: Esta subrutina se encarga de formar el array con las teclas presio-
+;                                  Encabezado
+; Descripcion: Esta subrutina se encarga de formar el array con las teclas presio-
 ; nadas por el usuario, tambien realiza el control y validacion de las distintas
 ; teclas presionadas. Al llenar el array esta subrutina pone la bandera ARRAY_OK
 ; en alto y el CONT_TCL en 0. El arreglo NUM_ARRAY utiliza como byte no valido
 ; el valor $FF
+;
+; Parametros de entrada:
+;       TECLA_IN: Contiene la tecla ya validada para analizarla
+
+;       NUM_ARRAY: Arreglo de tamano MAX_TCL que contendra los valores de las
+; 		    teclas leidas
+
+;       CONT_TCL: Cuenta la cantidad de teclas ya almacenadas en el array.
+;       
+
+; Parametros de salida:
+;       NUM_ARRAY: Arreglo de tamano MAX_TCL que contendra los valores de las
+; 		    teclas leidas
+;       ARRAY_OK: Bandera que se encarga de validar que el arreglo esta listo.
+;*******************************************************************************
 
 FORMAR_ARRAY:
         LDAB CONT_TCL        ; Cargando valores a utilizar
@@ -1401,7 +1615,7 @@ FORMAR_ARRAY_borrar_digito:    ; Borrando un digito
         RTS
 FORMAR_ARRAY_array_ok: ;Validando el array
         CLR CONT_TCL
-        BSET BANDERAS,$04
+        BSET BANDERAS+1,$04   ; Array_ok <-- 1
         RTS
 FORMAR_ARRAY_lleno:
         LDAA #$0E             ; Si la tecla es enter y MAX_TCL = Cont_TCL
@@ -1427,11 +1641,23 @@ FORMAR_ARRAY_lleno:
 ;*******************************************************************************
 ;                                SUBRUTINA MUX_TECLADO
 ;*******************************************************************************
-;Descripcion: Esta subrutina se encarga de leer una tecla del teclado de la
+;                                  Encabezado
+; Descripcion: Esta subrutina se encarga de leer una tecla del teclado de la
 ; Dragon 12. Utiliza como variable PATRON que es un contador que cuando es mayor
 ; a 4 (las filas del teclado) se termina la subrutina porque no se leyo ninguna
 ; tecla. En caso de que se lea una tecla se retorna en la variable TECLA. Si
 ; no existia una tecla se retorna un $FF en TECLA.
+
+; Parametros de entrada:
+;       PATRON: Se utiliza como constante para leer el teclado de 3x4.
+
+;       
+; Parametros de salida:
+;       TECLA: Retorna la tecla leida en el teclado. Si no se encuentra tecla
+;              presionada, se devuelve $FF.
+;*******************************************************************************
+
+;Descripcion: 
 
 MUX_TECLADO:
         MOVB #$FF,TECLA
@@ -1475,11 +1701,20 @@ FIN_MUX_TECLADO:                                 ; Retornando
 ;*******************************************************************************
 ;                                SUBRUTINA PATRON_LEDS
 ;*******************************************************************************
-;Descripcion:
+;                                  Encabezado
+; Descripcion: Esta subrutina se encarga de encender los leds en manera de 
+; alarma desde PH7 hasta PH3 cuando se pone en alto la bandera. 
 
+; Parametros de entrada:
+;       ALARMA: Bandera que si esta en 1 hace que la subrutina funcione
+;       LEDS: Para tomar lo que ya tiene y almacenar el led extra a encender
+;       
+; Parametros de salida:
+;       LEDS: Enciende el led correspondiente sin apagar el led de modo.
+;*******************************************************************************
 
 PATRON_LEDS:
-        BRSET BANDERAS,$10,PATRON_LEDS_desplazar_leds ;
+        BRSET BANDERAS+1,$10,PATRON_LEDS_desplazar_leds ; Si ALARMA = 1, se procede a hacer la alarma
         LDAA #$07            ; Asegurando que no este puesto el patron de emergencia
         ANDA LEDS
         STAA LEDS
@@ -1495,7 +1730,7 @@ PATRON_LEDS_desplazar_leds:            ; Logica de patron de emergencia
         ABA
         STAA LEDS
         RTS
-PATRON_LEDS_reiniciar_patron:
+PATRON_LEDS_reiniciar_patron: ; Reiniciando el patron de los LEDS en ph7
         BSET LEDS,$80
         BCLR LEDS,$08
         RTS
@@ -1516,8 +1751,18 @@ PATRON_LEDS_reiniciar_patron:
 ;*******************************************************************************
 ;                                INTERRUPCION RTI_ISR
 ;*******************************************************************************
-;Descripcion: Esta interrupcion se encarga de decrementar la variable CONT_REB en 1
+;                                  Encabezado
+; Descripcion: Esta interrupcion se encarga de decrementar la variable CONT_REB en 1
 ; cada 1 ms aproximadamente, si CONT_REB es cero la subrutina no hace nada.
+
+; Parametros de entrada:
+;       CONT_REB: Lo revisa a ver si es 0, sino lo decrementa
+;       
+; Parametros de salida:
+;       CONT_REB: Lo devuelve en 0 o decrementado por 1
+;*******************************************************************************
+
+;Descripcion: 
 
 RTI_ISR:        ; Teclado
 
@@ -1543,8 +1788,45 @@ FIN_RTI_ISR_cont_reb:                  ; Timer cuenta (modo run)
 
 
 ;*******************************************************************************
-;                                INTERRUPCION PHO_ISR
+;                                INTERRUPCION CALCULAR
 ;*******************************************************************************
+;                                  Encabezado
+; Descripcion: Esta interrupcion se divide en dos subrutinas:
+;
+;
+;***********************************
+;*        INTERRUPCION PTH0        *
+;***********************************
+; Descripcion: Esta interrupcion se encarga de tomar la variable TICK_VEL y re-
+; alizar el calculo de la velocida del vehiculo en KM/H que es almacenado en la
+; variable VELOC. Si la velocidad es mayor a 255 se almacena 255 en VELOC. 
+; Esta interrupcion habilita nuevamente el boton ph3.
+
+; Parametros de entrada:
+;       PTH3: Bandera que indica con un 1 que se viene de haber presionado ph3
+;       TICK_VEL: Recibe la cantidad de ticks que han pasado. Existe una relacion
+;       directa entre cada tick y el tiempo. Cada tick equivale a 0.0218 segundos
+;       CONT_REB: Se utilia para controlar los rebotes de los botones
+; Parametros de salida:
+;       VELOC: Velocidad en KM/H
+
+
+;***********************************
+;*        INTERRUPCION PTH3        *
+;***********************************
+; Descripcion: Esta interrupcion se encarga iniciar la cuenta de TICK_VEL en 0
+; ademas de activar el boton ph0 por medio de la bandera PH0 en 1. Esta subru-
+; tina tambien actualiza la pantalla LCD con el mensaje "CALCULANDO".  
+
+; Parametros de entrada:
+;       CONT_REB: Se utilia para controlar los rebotes de los botones
+
+; Parametros de salida:
+;       PH0: Bandera que se pone en 1 en esta subrutina. Activa el boton ph0.
+
+
+;*******************************************************************************
+
 ;Descripcion: Esta interrupcion se divide en 2 subrunitas:
 ; PTH0:
 
@@ -1555,8 +1837,8 @@ CALCULAR:
                 RTI
 
 PTH0:
-        BRCLR BANDERAS+1,$01,PTH0_retornar ; Para saber si realmente se presiono antes PTH3
-        BCLR BANDERAS+1,$01
+        BRCLR BANDERAS,$01,PTH0_retornar ; Para saber si realmente se presiono antes PTH3
+        BCLR BANDERAS,$01 ; Desactivando boton ph0
         TST CONT_REB      ;Control de rebotes
         BNE PTH0_retornar
         LDAA #20          ; Para controlar rebotes
@@ -1583,9 +1865,9 @@ PTH3:
 
         TST CONT_REB      ;Control de rebotes
         BNE PTH3_retornar
-        BRCLR BANDERAS+1,$02,PTH3_retornar
-        BSET BANDERAS+1,$01
-        BCLR BANDERAS+1,$02
+        BRCLR BANDERAS,$02,PTH3_retornar
+        BSET BANDERAS,$01       ; Activando boton ph0
+        BCLR BANDERAS,$02       ; desActivando boton ph3
         LDAA #20          ; Para controlar rebotes
         STAA CONT_REB
         CLR TICK_VEL
@@ -1624,11 +1906,26 @@ PTH3_retornar:
 ;*******************************************************************************
 ;                                INTERRUPCION OC4_ISR
 ;*******************************************************************************
-;Descripcion: Esta interrupcion realiza toda la logica para que funcionen los,
-; 4 displa de 7 segmentos y los leds a la vez. Para informacion mas detallada
-; ver el enunciado de la tarea
+;                                  Encabezado
+; Descripcion: Esta interrupcion da cada 20us, dentro de sus tareas esta:
+
+; - Control del ciclo de encendido y apagado (multiplexacion) de los display
+;   de 7 segmentos.
+; - Llamar cada 100 ms a las subrutinas CONV_BIN_BCD y BCD_7SEG, con el fin
+;   de actualizar los valores en los display de 7 seg
+; - Iniciar cada 200ms la conversion analogica digital ademas de llamar la 
+;   subrutina PATRON_LEDS que actualiza el patron de leds.
+
+; Parametros de entrada:
+;       DISP1, DISP2, DISP3, DISP4: Cada uno de los display
+;       LEDS: Contiene los LEDS a desplegar
+;       BRILLO: Contiene el brillo de la pantalla      
+; Parametros de salida: N/A
+
+;*******************************************************************************
+
 OC4_ISR:
-        BSET TFLG1,$10  ; Borrando bandera interrupcion
+        BSET TFLG1,$10                ; Borrando bandera interrupcion
         LDD CONT_7SEG                 ; Calculando si ya pasaron 100ms
         CPD #5000
         BEQ OC4_ISR_llamar
@@ -1640,7 +1937,6 @@ OC4_ISR_llamar:                       ; Cada 100ms se actualizan los datos de lo
         JSR CONV_BIN_BCD
         JSR BCD_7SEG
 OC4_ISR_continuar3:
-
         LDX #DISP1
         LDAA #100                 ;Verificando si el contador de tics ya
         CMPA CONT_TICKS            ; llego a 100.
@@ -1714,11 +2010,20 @@ OC4_ISR_retornar:
 ;*******************************************************************************
 ;                                INTERRUPCION ATD_ISR
 ;*******************************************************************************
-;Descripcion: Esta subrutina se encarga de leer 6 valores guardados en los reg
+;                                  Encabezado
+; Descripcion: Esta subrutina se encarga de leer 6 valores guardados en los reg
 ; del convertidor analogico a digital en el cual esta conectado el potenciometro
 ; y hacer un promedio de los mismos que es guardado en la variable POT. Por
 ; ultimo se calcula el valor de 0 a 100 (en intervalos de 5 en 5) del brillo
 ; a ser mostrado en los display, este brillo es guardado en la variable BRILLO.
+
+
+; Parametros de entrada: N/A
+;          
+; Parametros de salida: POT, BRILLO 
+
+;*******************************************************************************
+
 
 ATD_ISR:
         LDD ADR00H      ; Haciendo un promedio de los valores del CAD que esta
@@ -1763,10 +2068,20 @@ ATD_ISR:
 ;*******************************************************************************
 ;                                INTERRUPCION TCNT_ISR
 ;*******************************************************************************
-;Descripcion:
+;                                  Encabezado
+; Descripcion: Esta interrupcion se encarga de contar los ticks cada aprox 0.0218ms
+; incrementando TICK_VEL. Tambien controla el encendido y apagado de una bandera 
+; llamada PANT_FLAG que controla el encendido y apagado de la pantalla de 7 SEG.
+
+
+; Parametros de entrada: N/A
+;          
+; Parametros de salida: Pantflag: Bandera que si es 1 significa que se debe 
+; encender la pantalla de 7 seg.
+;*******************************************************************************
 
 TCNT_ISR:
-        BRCLR BANDERAS+1,$01,TCNT_ISR_no_contar ; Si ph0 no esta activa, no cuenta.
+        BRCLR BANDERAS,$01,TCNT_ISR_no_contar ; Si ph0 no esta activa, no cuenta.
         LDAA #$FF                               ; Si se va a rebasar, no cuenta mas.
         CMPA TICK_VEL
         BEQ TCNT_ISR_no_contar
@@ -1778,7 +2093,7 @@ TCNT_ISR_no_contar:
         STD TICK_EN
         BRA TCNT_ISR_continuar
 TCNT_ISR_set_pant_flag:
-        BSET BANDERAS, $08      ; Pantflag = 1
+        BSET BANDERAS+1, $08      ; Pantflag = 1
 TCNT_ISR_continuar:
         LDD TICK_DIS     ; Verificando si TICK_EN llego a 0, sino lo decrementa
         BEQ TCNT_ISR_clear_pant_flag
@@ -1786,7 +2101,7 @@ TCNT_ISR_continuar:
         STD TICK_DIS
         BRA TCNT_ISR_retornar
 TCNT_ISR_clear_pant_flag:
-        BCLR BANDERAS, $08      ; Pantflag = 0
+        BCLR BANDERAS+1, $08      ; Pantflag = 0
 TCNT_ISR_retornar:
         movb #$80,TFLG2  ; Borrando bandera interrupcion
         RTI
